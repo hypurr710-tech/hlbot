@@ -132,6 +132,28 @@ export async function getUserFunding(
   return (await postInfo(body)) as FundingEntry[];
 }
 
+export interface PortfolioPeriodData {
+  accountValueHistory: [number, string][];
+  pnlHistory: [number, string][];
+  vlm: string;
+}
+
+export type PortfolioTimeRange = "day" | "week" | "month" | "allTime";
+
+export async function getPortfolioHistory(
+  user: string
+): Promise<Record<PortfolioTimeRange, PortfolioPeriodData>> {
+  const data = (await postInfo({ type: "portfolio", user })) as [
+    string,
+    PortfolioPeriodData
+  ][];
+  const result: Record<string, PortfolioPeriodData> = {};
+  for (const [period, periodData] of data) {
+    result[period] = periodData;
+  }
+  return result as Record<PortfolioTimeRange, PortfolioPeriodData>;
+}
+
 export async function getAddressStats(address: string): Promise<AddressStats> {
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
