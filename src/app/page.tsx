@@ -13,6 +13,18 @@ import StatCard from "@/components/StatCard";
 import PortfolioChart from "@/components/PortfolioChart";
 import Link from "next/link";
 
+/** Safely parse a number, returning 0 for NaN/undefined */
+function safeNum(val: number | undefined | null): number {
+  if (val === undefined || val === null || isNaN(val)) return 0;
+  return val;
+}
+
+/** Get the latest value from a portfolio history array */
+function latestFromHistory(history: [number, string][] | undefined): number {
+  if (!history || history.length === 0) return 0;
+  return safeNum(parseFloat(history[history.length - 1][1]));
+}
+
 export default function Dashboard() {
   const { addresses } = useAddresses();
   const [stats, setStats] = useState<AddressStats[]>([]);
@@ -79,16 +91,17 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [fetchStats]);
 
+  // 30-day stats from fills
   const totals = stats.reduce(
     (acc, s) => ({
-      volume: acc.volume + s.totalVolume,
-      fees: acc.fees + s.totalFees,
-      builderFees: acc.builderFees + s.totalBuilderFees,
-      realizedPnl: acc.realizedPnl + s.realizedPnl,
-      unrealizedPnl: acc.unrealizedPnl + s.unrealizedPnl,
-      accountValue: acc.accountValue + s.accountValue,
-      trades: acc.trades + s.totalTrades,
-      fundingPnl: acc.fundingPnl + s.fundingPnl,
+      volume: acc.volume + safeNum(s.totalVolume),
+      fees: acc.fees + safeNum(s.totalFees),
+      builderFees: acc.builderFees + safeNum(s.totalBuilderFees),
+      realizedPnl: acc.realizedPnl + safeNum(s.realizedPnl),
+      unrealizedPnl: acc.unrealizedPnl + safeNum(s.unrealizedPnl),
+      accountValue: acc.accountValue + safeNum(s.accountValue),
+      trades: acc.trades + safeNum(s.totalTrades),
+      fundingPnl: acc.fundingPnl + safeNum(s.fundingPnl),
     }),
     {
       volume: 0,
@@ -102,24 +115,18 @@ export default function Dashboard() {
     }
   );
 
-  // All-time volume & PnL from portfolio API
-  const allTimeVolume = Object.values(portfolioData).reduce((sum, d) => {
-    return sum + parseFloat(d.allTime?.vlm || "0");
-  }, 0);
-  const allTimePnl = Object.values(portfolioData).reduce((sum, d) => {
-    const history = d.allTime?.pnlHistory;
-    if (history && history.length > 0) {
-      return sum + parseFloat(history[history.length - 1][1]);
-    }
-    return sum;
+  // All-time stats from portfolio API (includes spot + perps + staked)
+  const portfolioValue = Object.values(portfolioData).reduce((sum, d) => {
+    return sum + latestFromHistory(d.allTime?.accountValueHistory);
   }, 0);
 
-  const netPnl =
-    totals.realizedPnl +
-    totals.unrealizedPnl +
-    totals.fundingPnl -
-    totals.fees -
-    totals.builderFees;
+  const allTimeVolume = Object.values(portfolioData).reduce((sum, d) => {
+    return sum + safeNum(parseFloat(d.allTime?.vlm || "0"));
+  }, 0);
+
+  const allTimePnl = Object.values(portfolioData).reduce((sum, d) => {
+    return sum + latestFromHistory(d.allTime?.pnlHistory);
+  }, 0);
 
   if (addresses.length === 0) {
     return (
@@ -143,7 +150,7 @@ export default function Dashboard() {
           No addresses tracked
         </h2>
         <p className="text-sm text-hl-text-secondary mb-6 text-center max-w-md">
-          Add your Hyperliquid wallet addresses to start tracking your MM bot
+          Add your Hyperliquid wallet addresses to start tracking your
           performance, trading volume, fees, and PnL.
         </p>
         <Link
@@ -193,27 +200,27 @@ export default function Dashboard() {
       {/* Top Stats */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard
-          title="Account Value"
-          value={formatUsd(totals.accountValue)}
-          subtitle="Total across all wallets"
-          loading={loading}
+          title="Portfolio Value"
+          value={formatUsd(portfolioValue)}
+          subtitle="Perps + Spot + Staked"
+          loading={portfolioLoading}
         />
         <StatCard
           title="All-Time PnL"
           value={formatUsd(allTimePnl)}
-          subtitle="Combined (from portfolio API)"
+          subtitle="Combined"
           loading={portfolioLoading}
         />
         <StatCard
           title="All-Time Volume"
           value={formatUsd(allTimeVolume)}
-          subtitle={`30D: ${formatUsd(totals.volume)}`}
+          subtitle={`30D: ${formatUsd(totals.volume)} (${totals.trades.toLocaleString()} trades)`}
           loading={portfolioLoading}
         />
         <StatCard
-          title="Total Fees"
+          title="30D Fees"
           value={formatUsd(totals.fees + totals.builderFees)}
-          subtitle="30D Trading + Builder fees"
+          subtitle={`Trading ${formatUsd(totals.fees)} + Builder ${formatUsd(totals.builderFees)}`}
           loading={loading}
         />
       </div>
@@ -227,9 +234,9 @@ export default function Dashboard() {
       {/* Secondary Stats */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard
-          title="30D Net PnL"
-          value={formatUsd(netPnl)}
-          subtitle="Realized + Unrealized - Fees"
+          title="Perps Account"
+          value={formatUsd(totals.accountValue)}
+          subtitle="Clearinghouse value"
           loading={loading}
         />
         <StatCard
@@ -240,16 +247,13 @@ export default function Dashboard() {
         <StatCard
           title="Funding PnL"
           value={formatUsd(totals.fundingPnl)}
+          subtitle="30D"
           loading={loading}
         />
         <StatCard
-          title="Trading Fees"
-          value={formatUsd(totals.fees)}
-          subtitle={
-            totals.builderFees > 0
-              ? `+ ${formatUsd(totals.builderFees)} builder`
-              : undefined
-          }
+          title="Realized PnL"
+          value={formatUsd(totals.realizedPnl)}
+          subtitle="30D"
           loading={loading}
         />
       </div>
@@ -267,22 +271,19 @@ export default function Dashboard() {
                   Address
                 </th>
                 <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
-                  Account Value
+                  Portfolio Value
                 </th>
                 <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
                   All-Time Volume
                 </th>
                 <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
+                  All-Time PnL
+                </th>
+                <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
                   30D Trades
                 </th>
                 <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
-                  Realized PnL
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
-                  Fees
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
-                  Net PnL
+                  30D Fees
                 </th>
               </tr>
             </thead>
@@ -290,7 +291,7 @@ export default function Dashboard() {
               {loading
                 ? Array.from({ length: 3 }).map((_, i) => (
                     <tr key={i} className="border-b border-hl-border/50">
-                      {Array.from({ length: 7 }).map((_, j) => (
+                      {Array.from({ length: 6 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="skeleton h-4 w-20" />
                         </td>
@@ -302,14 +303,16 @@ export default function Dashboard() {
                       (a) =>
                         a.address.toLowerCase() === s.address.toLowerCase()
                     )?.label;
-                    const addrNetPnl =
-                      s.realizedPnl +
-                      s.unrealizedPnl +
-                      s.fundingPnl -
-                      s.totalFees -
-                      s.totalBuilderFees;
-                    const addrAllTimeVlm = parseFloat(
-                      portfolioData[s.address]?.allTime?.vlm || "0"
+                    const addrPortfolio = latestFromHistory(
+                      portfolioData[s.address]?.allTime?.accountValueHistory
+                    );
+                    const addrAllTimeVlm = safeNum(
+                      parseFloat(
+                        portfolioData[s.address]?.allTime?.vlm || "0"
+                      )
+                    );
+                    const addrAllTimePnl = latestFromHistory(
+                      portfolioData[s.address]?.allTime?.pnlHistory
                     );
                     return (
                       <tr
@@ -329,30 +332,26 @@ export default function Dashboard() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
-                          {formatUsd(s.accountValue)}
+                          {formatUsd(addrPortfolio)}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
                           {formatUsd(addrAllTimeVlm)}
                         </td>
+                        <td
+                          className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(
+                            addrAllTimePnl
+                          )}`}
+                        >
+                          {formatUsd(addrAllTimePnl)}
+                        </td>
                         <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
                           {s.totalTrades.toLocaleString()}
                         </td>
-                        <td
-                          className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(
-                            s.realizedPnl
-                          )}`}
-                        >
-                          {formatUsd(s.realizedPnl)}
-                        </td>
                         <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
-                          {formatUsd(s.totalFees + s.totalBuilderFees)}
-                        </td>
-                        <td
-                          className={`px-4 py-3 text-right text-sm font-mono font-medium ${pnlColor(
-                            addrNetPnl
-                          )}`}
-                        >
-                          {formatUsd(addrNetPnl)}
+                          {formatUsd(
+                            safeNum(s.totalFees) +
+                              safeNum(s.totalBuilderFees)
+                          )}
                         </td>
                       </tr>
                     );
@@ -403,7 +402,7 @@ export default function Dashboard() {
                         a.address.toLowerCase() === s.address.toLowerCase()
                     )?.label;
                     const size = parseFloat(p.szi);
-                    const upnl = parseFloat(p.unrealizedPnl);
+                    const upnl = safeNum(parseFloat(p.unrealizedPnl));
                     return (
                       <tr
                         key={`${s.address}-${p.coin}`}

@@ -109,6 +109,34 @@ export async function getUserFills(
   return (await postInfo({ type: "userFills", user })) as Fill[];
 }
 
+const FILLS_PAGE_LIMIT = 2000;
+const MAX_FILL_PAGES = 20;
+
+/** Fetch all fills with automatic pagination to bypass the 2000-per-request limit */
+export async function getAllUserFills(
+  user: string,
+  startTime: number,
+  endTime?: number
+): Promise<Fill[]> {
+  const allFills: Fill[] = [];
+  let currentStart = startTime;
+
+  for (let page = 0; page < MAX_FILL_PAGES; page++) {
+    const fills = await getUserFills(user, currentStart, endTime);
+    if (fills.length === 0) break;
+
+    allFills.push(...fills);
+
+    if (fills.length < FILLS_PAGE_LIMIT) break;
+
+    // Next page starts after the last fill's time
+    const lastTime = fills[fills.length - 1].time;
+    currentStart = lastTime + 1;
+  }
+
+  return allFills;
+}
+
 export async function getClearinghouseState(
   user: string
 ): Promise<ClearinghouseState> {
@@ -158,7 +186,7 @@ export async function getAddressStats(address: string): Promise<AddressStats> {
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
   const [fills, clearinghouse, funding] = await Promise.all([
-    getUserFills(address, thirtyDaysAgo),
+    getAllUserFills(address, thirtyDaysAgo),
     getClearinghouseState(address),
     getUserFunding(address, thirtyDaysAgo),
   ]);
