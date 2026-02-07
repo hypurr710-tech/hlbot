@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAddresses } from "@/lib/store";
 import {
   getAddressStats,
@@ -36,9 +36,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-
-  // Track whether this is the very first load (no data yet)
-  const isFirstLoad = stats.length === 0 && Object.keys(portfolioData).length === 0;
+  const hasLoadedOnce = useRef(false);
 
   const fetchStats = useCallback(async () => {
     if (addresses.length === 0) {
@@ -48,33 +46,20 @@ export default function Dashboard() {
       setPortfolioLoading(false);
       return;
     }
-    // Only show loading skeleton on the very first fetch (no existing data)
-    const firstFetch = stats.length === 0;
-    if (firstFetch) {
+    // Only show loading skeleton on the very first fetch
+    if (!hasLoadedOnce.current) {
       setLoading(true);
       setPortfolioLoading(true);
     }
+
+    // Fetch portfolio data first (fast API, single call per address)
     try {
-      const [statsResults, portfolioResults] = await Promise.all([
-        Promise.allSettled(
-          addresses.map((a) => getAddressStats(a.address))
-        ),
-        Promise.allSettled(
-          addresses.map(async (a) => ({
-            address: a.address,
-            data: await getPortfolioHistory(a.address),
-          }))
-        ),
-      ]);
-
-      const successful = statsResults
-        .filter(
-          (r): r is PromiseFulfilledResult<AddressStats> =>
-            r.status === "fulfilled"
-        )
-        .map((r) => r.value);
-      setStats(successful);
-
+      const portfolioResults = await Promise.allSettled(
+        addresses.map(async (a) => ({
+          address: a.address,
+          data: await getPortfolioHistory(a.address),
+        }))
+      );
       const newPortfolio: Record<
         string,
         Record<string, PortfolioPeriodData>
@@ -85,14 +70,32 @@ export default function Dashboard() {
         }
       }
       setPortfolioData(newPortfolio);
+      setPortfolioLoading(false);
+    } catch (err) {
+      console.error("Failed to fetch portfolio:", err);
+      setPortfolioLoading(false);
+    }
 
-      setLastUpdated(new Date());
+    // Then fetch 30D stats (slower - involves fill pagination)
+    try {
+      const statsResults = await Promise.allSettled(
+        addresses.map((a) => getAddressStats(a.address))
+      );
+      const successful = statsResults
+        .filter(
+          (r): r is PromiseFulfilledResult<AddressStats> =>
+            r.status === "fulfilled"
+        )
+        .map((r) => r.value);
+      setStats(successful);
     } catch (err) {
       console.error("Failed to fetch stats:", err);
     }
+
+    hasLoadedOnce.current = true;
     setLoading(false);
-    setPortfolioLoading(false);
-  }, [addresses, stats.length]);
+    setLastUpdated(new Date());
+  }, [addresses]);
 
   useEffect(() => {
     fetchStats();

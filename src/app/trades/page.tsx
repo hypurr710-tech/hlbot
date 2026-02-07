@@ -1,9 +1,20 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAddresses } from "@/lib/store";
 import { getUserFills, Fill } from "@/lib/hyperliquid";
 import { formatUsd, formatDate, pnlColor, formatAddress } from "@/lib/format";
+
+type SortKey = "coin" | "trades" | "volume" | "pnl" | "fees";
+type SortDir = "asc" | "desc";
+
+interface CoinSummary {
+  coin: string;
+  trades: number;
+  volume: number;
+  pnl: number;
+  fees: number;
+}
 
 export default function TradesPage() {
   const { addresses } = useAddresses();
@@ -13,6 +24,9 @@ export default function TradesPage() {
   const [filterSide, setFilterSide] = useState<string>("all");
   const [filterAddress, setFilterAddress] = useState<string>("all");
   const [page, setPage] = useState(0);
+  const [sortKey, setSortKey] = useState<SortKey>("volume");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [showSummary, setShowSummary] = useState(true);
   const perPage = 50;
 
   const fetchFills = useCallback(async () => {
@@ -65,6 +79,41 @@ export default function TradesPage() {
     0
   );
   const totalFees = filtered.reduce((sum, f) => sum + parseFloat(f.fee), 0);
+  const totalPnl = filtered.reduce((sum, f) => sum + parseFloat(f.closedPnl), 0);
+
+  // Per-coin summary with sorting
+  const coinSummaries = useMemo(() => {
+    const map = new Map<string, CoinSummary>();
+    for (const f of filtered) {
+      const existing = map.get(f.coin) || { coin: f.coin, trades: 0, volume: 0, pnl: 0, fees: 0 };
+      existing.trades += 1;
+      existing.volume += parseFloat(f.px) * parseFloat(f.sz);
+      existing.pnl += parseFloat(f.closedPnl);
+      existing.fees += parseFloat(f.fee);
+      map.set(f.coin, existing);
+    }
+    const arr = Array.from(map.values());
+    arr.sort((a, b) => {
+      const mul = sortDir === "asc" ? 1 : -1;
+      if (sortKey === "coin") return mul * a.coin.localeCompare(b.coin);
+      return mul * (a[sortKey] - b[sortKey]);
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const sortIcon = (key: SortKey) => {
+    if (sortKey !== key) return "↕";
+    return sortDir === "asc" ? "↑" : "↓";
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -75,7 +124,8 @@ export default function TradesPage() {
           </h1>
           <p className="text-sm text-hl-text-secondary mt-1">
             {filtered.length.toLocaleString()} trades &middot;{" "}
-            {formatUsd(totalVolume)} volume &middot; {formatUsd(totalFees)} fees
+            {formatUsd(totalVolume)} volume &middot; {formatUsd(totalFees)} fees &middot;{" "}
+            <span className={pnlColor(totalPnl)}>{formatUsd(totalPnl)} PnL</span>
           </p>
         </div>
         <button
@@ -133,7 +183,95 @@ export default function TradesPage() {
         </select>
       </div>
 
-      {/* Table */}
+      {/* Coin Summary */}
+      {!loading && coinSummaries.length > 0 && (
+        <div>
+          <button
+            onClick={() => setShowSummary(!showSummary)}
+            className="flex items-center gap-2 text-lg font-semibold text-hl-text-primary mb-4"
+          >
+            코인별 요약
+            <span className="text-xs text-hl-text-tertiary">
+              {showSummary ? "▼" : "▶"} {coinSummaries.length}개 페어
+            </span>
+          </button>
+          {showSummary && (
+            <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden mb-6">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-hl-border">
+                      {([
+                        { key: "coin" as SortKey, label: "코인", align: "left" },
+                        { key: "trades" as SortKey, label: "거래수", align: "right" },
+                        { key: "volume" as SortKey, label: "총 볼륨", align: "right" },
+                        { key: "pnl" as SortKey, label: "Closed PnL", align: "right" },
+                        { key: "fees" as SortKey, label: "수수료", align: "right" },
+                      ]).map((col) => (
+                        <th
+                          key={col.key}
+                          onClick={() => handleSort(col.key)}
+                          className={`px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-${col.align} cursor-pointer hover:text-hl-accent transition-colors select-none`}
+                        >
+                          {col.label} <span className="text-hl-accent">{sortIcon(col.key)}</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coinSummaries.map((c) => (
+                      <tr
+                        key={c.coin}
+                        onClick={() => {
+                          setFilterCoin(c.coin);
+                          setPage(0);
+                        }}
+                        className="border-b border-hl-border/50 hover:bg-hl-bg-hover/50 transition-colors cursor-pointer"
+                      >
+                        <td className="px-4 py-3 text-sm font-medium text-hl-text-primary">
+                          {c.coin}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
+                          {c.trades.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
+                          {formatUsd(c.volume)}
+                        </td>
+                        <td className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(c.pnl)}`}>
+                          {formatUsd(c.pnl)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
+                          {formatUsd(c.fees)}
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Total row */}
+                    <tr className="border-t-2 border-hl-accent/30 bg-hl-bg-tertiary/50">
+                      <td className="px-4 py-3 text-sm font-semibold text-hl-accent">
+                        합계
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-mono font-semibold text-hl-text-primary">
+                        {filtered.length.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-mono font-semibold text-hl-text-primary">
+                        {formatUsd(totalVolume)}
+                      </td>
+                      <td className={`px-4 py-3 text-right text-sm font-mono font-semibold ${pnlColor(totalPnl)}`}>
+                        {formatUsd(totalPnl)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-mono font-semibold text-hl-red">
+                        {formatUsd(totalFees)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Trade Table */}
       <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
