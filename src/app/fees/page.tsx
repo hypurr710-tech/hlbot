@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAddresses } from "@/lib/store";
-import { getUserFills, getUserFunding, Fill, FundingEntry } from "@/lib/hyperliquid";
+import { getUserFills, Fill } from "@/lib/hyperliquid";
 import { formatUsd, formatAddress } from "@/lib/format";
 import StatCard from "@/components/StatCard";
 
@@ -20,11 +20,13 @@ interface AddressFeeBreakdown {
   label: string;
   tradingFees: number;
   builderFees: number;
-  fundingPaid: number;
-  fundingReceived: number;
-  netFunding: number;
-  totalCost: number;
+  totalFees: number;
   volume: number;
+  trades: number;
+}
+
+function safeNum(val: number): number {
+  return isNaN(val) ? 0 : val;
 }
 
 export default function FeesPage() {
@@ -32,6 +34,7 @@ export default function FeesPage() {
   const [coinBreakdown, setCoinBreakdown] = useState<CoinFeeBreakdown[]>([]);
   const [addressBreakdown, setAddressBreakdown] = useState<AddressFeeBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedOnce = useRef(false);
 
   const fetchData = useCallback(async () => {
     if (addresses.length === 0) {
@@ -40,28 +43,21 @@ export default function FeesPage() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!hasLoadedOnce.current) setLoading(true);
     try {
-      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
       const results = await Promise.allSettled(
         addresses.map(async (a) => {
-          const [fills, funding] = await Promise.all([
-            getUserFills(a.address, thirtyDaysAgo),
-            getUserFunding(a.address, thirtyDaysAgo),
-          ]);
-          return { address: a.address, label: a.label, fills, funding };
+          const fills = await getUserFills(a.address);
+          return { address: a.address, label: a.label, fills };
         })
       );
 
       const successful = results
         .filter(
-          (
-            r
-          ): r is PromiseFulfilledResult<{
+          (r): r is PromiseFulfilledResult<{
             address: string;
             label: string;
             fills: Fill[];
-            funding: FundingEntry[];
           }> => r.status === "fulfilled"
         )
         .map((r) => r.value);
@@ -78,10 +74,10 @@ export default function FeesPage() {
             trades: 0,
             avgFeeRate: 0,
           };
-          const notional = parseFloat(fill.px) * parseFloat(fill.sz);
+          const notional = safeNum(parseFloat(fill.px) * parseFloat(fill.sz));
           existing.volume += notional;
-          existing.fees += parseFloat(fill.fee);
-          existing.builderFees += parseFloat(fill.builderFee || "0");
+          existing.fees += safeNum(parseFloat(fill.fee));
+          existing.builderFees += safeNum(parseFloat(fill.builderFee || "0"));
           existing.trades += 1;
           coinMap.set(fill.coin, existing);
         }
@@ -96,38 +92,28 @@ export default function FeesPage() {
 
       // Address breakdown
       const addrArr: AddressFeeBreakdown[] = successful.map(
-        ({ address, label, fills, funding }) => {
+        ({ address, label, fills }) => {
           let tradingFees = 0;
           let builderFees = 0;
           let volume = 0;
           for (const fill of fills) {
-            tradingFees += parseFloat(fill.fee);
-            builderFees += parseFloat(fill.builderFee || "0");
-            volume += parseFloat(fill.px) * parseFloat(fill.sz);
+            tradingFees += safeNum(parseFloat(fill.fee));
+            builderFees += safeNum(parseFloat(fill.builderFee || "0"));
+            volume += safeNum(parseFloat(fill.px) * parseFloat(fill.sz));
           }
-
-          let fundingPaid = 0;
-          let fundingReceived = 0;
-          for (const f of funding) {
-            const usdc = parseFloat(f.usdc);
-            if (usdc >= 0) fundingReceived += usdc;
-            else fundingPaid += Math.abs(usdc);
-          }
-
           return {
             address,
             label,
             tradingFees,
             builderFees,
-            fundingPaid,
-            fundingReceived,
-            netFunding: fundingReceived - fundingPaid,
-            totalCost: tradingFees + builderFees + fundingPaid - fundingReceived,
+            totalFees: tradingFees + builderFees,
             volume,
+            trades: fills.length,
           };
         }
       );
-      setAddressBreakdown(addrArr.sort((a, b) => b.totalCost - a.totalCost));
+      setAddressBreakdown(addrArr.sort((a, b) => b.totalFees - a.totalFees));
+      hasLoadedOnce.current = true;
     } catch (err) {
       console.error("Failed to fetch fee data:", err);
     }
@@ -136,25 +122,19 @@ export default function FeesPage() {
 
   useEffect(() => {
     fetchData();
+    const interval = setInterval(fetchData, 60_000);
+    return () => clearInterval(interval);
   }, [fetchData]);
 
   const totals = addressBreakdown.reduce(
     (acc, a) => ({
       tradingFees: acc.tradingFees + a.tradingFees,
       builderFees: acc.builderFees + a.builderFees,
-      fundingPaid: acc.fundingPaid + a.fundingPaid,
-      fundingReceived: acc.fundingReceived + a.fundingReceived,
-      totalCost: acc.totalCost + a.totalCost,
+      totalFees: acc.totalFees + a.totalFees,
       volume: acc.volume + a.volume,
+      trades: acc.trades + a.trades,
     }),
-    {
-      tradingFees: 0,
-      builderFees: 0,
-      fundingPaid: 0,
-      fundingReceived: 0,
-      totalCost: 0,
-      volume: 0,
-    }
+    { tradingFees: 0, builderFees: 0, totalFees: 0, volume: 0, trades: 0 }
   );
 
   const effectiveFeeRate =
@@ -165,10 +145,10 @@ export default function FeesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-hl-text-primary">
-            Fees & Costs
+            수수료 현황
           </h1>
           <p className="text-sm text-hl-text-secondary mt-1">
-            30-day fee breakdown across all addresses
+            전체 수수료 내역 (최근 거래 기준)
           </p>
         </div>
         <button
@@ -181,63 +161,36 @@ export default function FeesPage() {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <StatCard
-          title="Trading Fees"
-          value={formatUsd(totals.tradingFees)}
+          title="총 수수료"
+          value={formatUsd(totals.totalFees)}
+          subtitle={`Trading ${formatUsd(totals.tradingFees)} + Builder ${formatUsd(totals.builderFees)}`}
           loading={loading}
         />
         <StatCard
-          title="Builder Fees"
-          value={formatUsd(totals.builderFees)}
+          title="총 볼륨"
+          value={formatUsd(totals.volume)}
+          subtitle={`${totals.trades.toLocaleString()} trades`}
           loading={loading}
         />
         <StatCard
-          title="Funding Paid"
-          value={formatUsd(totals.fundingPaid)}
-          loading={loading}
-        />
-        <StatCard
-          title="Funding Received"
-          value={formatUsd(totals.fundingReceived)}
-          loading={loading}
-        />
-        <StatCard
-          title="Effective Fee Rate"
+          title="평균 수수료율"
           value={`${effectiveFeeRate.toFixed(4)}%`}
-          subtitle={`${formatUsd(totals.volume)} volume`}
+          subtitle="Trading fees / Volume"
+          loading={loading}
+        />
+        <StatCard
+          title="Builder 수수료"
+          value={formatUsd(totals.builderFees)}
           loading={loading}
         />
       </div>
 
-      {/* Total cost banner */}
-      {!loading && (
-        <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs font-medium text-hl-text-secondary uppercase tracking-wider">
-                Total Net Cost (30d)
-              </span>
-              <p className="text-xs text-hl-text-tertiary mt-1">
-                Trading Fees + Builder Fees + Net Funding
-              </p>
-            </div>
-            <span
-              className={`text-3xl font-semibold font-mono ${
-                totals.totalCost > 0 ? "text-hl-red" : "text-hl-green"
-              }`}
-            >
-              {totals.totalCost > 0 ? "-" : "+"}
-              {formatUsd(Math.abs(totals.totalCost))}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Per-Address Fee Breakdown */}
+      {/* Per-Address Fees */}
       <div>
         <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
-          Per-Address Fees
+          주소별 수수료
         </h2>
         <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
@@ -245,13 +198,12 @@ export default function FeesPage() {
               <thead>
                 <tr className="border-b border-hl-border">
                   {[
-                    { label: "Address", align: "left" },
-                    { label: "Volume", align: "right" },
-                    { label: "Trading Fees", align: "right" },
-                    { label: "Builder Fees", align: "right" },
-                    { label: "Funding Paid", align: "right" },
-                    { label: "Funding Recv", align: "right" },
-                    { label: "Net Cost", align: "right" },
+                    { label: "주소", align: "left" },
+                    { label: "거래수", align: "right" },
+                    { label: "볼륨", align: "right" },
+                    { label: "Trading 수수료", align: "right" },
+                    { label: "Builder 수수료", align: "right" },
+                    { label: "총 수수료", align: "right" },
                   ].map((col) => (
                     <th
                       key={col.label}
@@ -266,7 +218,7 @@ export default function FeesPage() {
                 {loading ? (
                   Array.from({ length: 3 }).map((_, i) => (
                     <tr key={i} className="border-b border-hl-border/50">
-                      {Array.from({ length: 7 }).map((_, j) => (
+                      {Array.from({ length: 6 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="skeleton h-4 w-20" />
                         </td>
@@ -276,10 +228,10 @@ export default function FeesPage() {
                 ) : addressBreakdown.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={6}
                       className="px-4 py-12 text-center text-sm text-hl-text-tertiary"
                     >
-                      No fee data available. Add addresses to track fees.
+                      주소를 추가하면 수수료 내역을 볼 수 있습니다.
                     </td>
                   </tr>
                 ) : (
@@ -298,6 +250,9 @@ export default function FeesPage() {
                           </span>
                         </div>
                       </td>
+                      <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
+                        {a.trades.toLocaleString()}
+                      </td>
                       <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
                         {formatUsd(a.volume)}
                       </td>
@@ -307,19 +262,8 @@ export default function FeesPage() {
                       <td className="px-4 py-3 text-right text-sm font-mono text-hl-red-dim">
                         {formatUsd(a.builderFees)}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
-                        {formatUsd(a.fundingPaid)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-mono text-hl-green">
-                        {formatUsd(a.fundingReceived)}
-                      </td>
-                      <td
-                        className={`px-4 py-3 text-right text-sm font-mono font-medium ${
-                          a.totalCost > 0 ? "text-hl-red" : "text-hl-green"
-                        }`}
-                      >
-                        {a.totalCost > 0 ? "-" : "+"}
-                        {formatUsd(Math.abs(a.totalCost))}
+                      <td className="px-4 py-3 text-right text-sm font-mono font-medium text-hl-red">
+                        {formatUsd(a.totalFees)}
                       </td>
                     </tr>
                   ))
@@ -330,10 +274,10 @@ export default function FeesPage() {
         </div>
       </div>
 
-      {/* Per-Coin Fee Breakdown */}
+      {/* Per-Coin Fees */}
       <div>
         <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
-          Per-Coin Fees
+          코인별 수수료
         </h2>
         <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
@@ -341,12 +285,11 @@ export default function FeesPage() {
               <thead>
                 <tr className="border-b border-hl-border">
                   {[
-                    { label: "Coin", align: "left" },
-                    { label: "Trades", align: "right" },
-                    { label: "Volume", align: "right" },
-                    { label: "Trading Fees", align: "right" },
-                    { label: "Builder Fees", align: "right" },
-                    { label: "Avg Fee Rate", align: "right" },
+                    { label: "코인", align: "left" },
+                    { label: "거래수", align: "right" },
+                    { label: "볼륨", align: "right" },
+                    { label: "수수료", align: "right" },
+                    { label: "수수료율", align: "right" },
                   ].map((col) => (
                     <th
                       key={col.label}
@@ -361,7 +304,7 @@ export default function FeesPage() {
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="border-b border-hl-border/50">
-                      {Array.from({ length: 6 }).map((_, j) => (
+                      {Array.from({ length: 5 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="skeleton h-4 w-16" />
                         </td>
@@ -371,10 +314,10 @@ export default function FeesPage() {
                 ) : coinBreakdown.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={5}
                       className="px-4 py-12 text-center text-sm text-hl-text-tertiary"
                     >
-                      No coin fee data available.
+                      데이터 없음
                     </td>
                   </tr>
                 ) : (
@@ -393,10 +336,7 @@ export default function FeesPage() {
                         {formatUsd(c.volume)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
-                        {formatUsd(c.fees)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-mono text-hl-red-dim">
-                        {formatUsd(c.builderFees)}
+                        {formatUsd(c.fees + c.builderFees)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
                         {c.avgFeeRate.toFixed(4)}%
