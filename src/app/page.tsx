@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useAddresses } from "@/lib/store";
 import {
   getAddressStats,
@@ -26,6 +26,170 @@ function safeNum(val: number | undefined | null): number {
 function latestFromHistory(history: [number, string][] | undefined): number {
   if (!history || history.length === 0) return 0;
   return safeNum(parseFloat(history[history.length - 1][1]));
+}
+
+import { TrackedAddress, saveAddresses } from "@/lib/store";
+
+type AddrSortKey = "label" | "portfolio" | "volume" | "pnl" | "trades" | "fees";
+
+function PerAddressTable({
+  stats,
+  addresses,
+  portfolioData,
+  loading,
+}: {
+  stats: AddressStats[];
+  addresses: TrackedAddress[];
+  portfolioData: Record<string, Record<string, PortfolioPeriodData>>;
+  loading: boolean;
+}) {
+  const { setAddresses } = useAddresses();
+  const [sortKey, setSortKey] = useState<AddrSortKey>("portfolio");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  const rows = useMemo(() => {
+    return stats.map((s) => {
+      const addrLabel = addresses.find(
+        (a) => a.address.toLowerCase() === s.address.toLowerCase()
+      )?.label || "";
+      const portfolio = latestFromHistory(
+        portfolioData[s.address]?.allTime?.accountValueHistory
+      );
+      const volume = safeNum(parseFloat(portfolioData[s.address]?.allTime?.vlm || "0"));
+      const pnl = latestFromHistory(portfolioData[s.address]?.allTime?.pnlHistory);
+      const fees = safeNum(s.totalFees) + safeNum(s.totalBuilderFees);
+      return { address: s.address, label: addrLabel, portfolio, volume, pnl, trades: s.totalTrades, fees };
+    });
+  }, [stats, addresses, portfolioData]);
+
+  const sorted = useMemo(() => {
+    const arr = [...rows];
+    const mul = sortDir === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      if (sortKey === "label") return mul * a.label.localeCompare(b.label);
+      return mul * (a[sortKey] - b[sortKey]);
+    });
+    return arr;
+  }, [rows, sortKey, sortDir]);
+
+  const handleSort = (key: AddrSortKey) => {
+    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const icon = (key: AddrSortKey) => {
+    if (sortKey !== key) return "↕";
+    return sortDir === "asc" ? "↑" : "↓";
+  };
+
+  const handleDrop = (toIdx: number) => {
+    if (dragIdx === null || dragIdx === toIdx) { setDragIdx(null); setDragOverIdx(null); return; }
+    const updated = [...addresses];
+    const [moved] = updated.splice(dragIdx, 1);
+    updated.splice(toIdx, 0, moved);
+    saveAddresses(updated);
+    setAddresses(updated);
+    setDragIdx(null);
+    setDragOverIdx(null);
+    setSortKey("label"); // reset to manual order
+  };
+
+  // When using manual drag, show addresses order; when sorting, show sorted
+  const displayRows = sortKey === "label" && sortDir === "asc" ?
+    addresses.map((a) => rows.find((r) => r.address.toLowerCase() === a.address.toLowerCase())).filter(Boolean) as typeof rows :
+    sorted;
+
+  const cols: { key: AddrSortKey; label: string; align: string }[] = [
+    { key: "label", label: "Address", align: "left" },
+    { key: "portfolio", label: "Portfolio Value", align: "right" },
+    { key: "volume", label: "All-Time Volume", align: "right" },
+    { key: "pnl", label: "All-Time PnL", align: "right" },
+    { key: "trades", label: "30D Trades", align: "right" },
+    { key: "fees", label: "30D Fees", align: "right" },
+  ];
+
+  return (
+    <div>
+      <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
+        Per-Address Breakdown
+      </h2>
+      <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-hl-border">
+              {cols.map((col) => (
+                <th
+                  key={col.key}
+                  onClick={() => handleSort(col.key)}
+                  className={`px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-${col.align} cursor-pointer hover:text-hl-accent transition-colors select-none`}
+                >
+                  {col.label} <span className="text-hl-accent">{icon(col.key)}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading
+              ? Array.from({ length: 3 }).map((_, i) => (
+                  <tr key={i} className="border-b border-hl-border/50">
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="skeleton h-4 w-20" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              : displayRows.map((r, idx) => (
+                  <tr
+                    key={r.address}
+                    draggable
+                    onDragStart={() => setDragIdx(idx)}
+                    onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
+                    onDrop={() => handleDrop(idx)}
+                    onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+                    className={`border-b border-hl-border/50 transition-all cursor-grab active:cursor-grabbing ${
+                      dragIdx === idx ? "opacity-40" : dragOverIdx === idx ? "bg-hl-accent/5 border-t-2 border-t-hl-accent" : "hover:bg-hl-bg-hover/50"
+                    }`}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-3.5 h-3.5 text-hl-text-tertiary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+                        </svg>
+                        <div className="flex flex-col">
+                          {r.label && (
+                            <span className="text-sm font-medium text-hl-text-primary">{r.label}</span>
+                          )}
+                          <span className="text-xs font-mono text-hl-text-tertiary">
+                            {r.address.slice(0, 6)}...{r.address.slice(-4)}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
+                      {formatUsd(r.portfolio)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
+                      {formatUsd(r.volume)}
+                    </td>
+                    <td className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(r.pnl)}`}>
+                      {formatUsd(r.pnl)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
+                      {r.trades.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
+                      {formatUsd(r.fees)}
+                    </td>
+                  </tr>
+                ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 export default function Dashboard() {
@@ -292,107 +456,12 @@ export default function Dashboard() {
       </div>
 
       {/* Per-Address Breakdown */}
-      <div>
-        <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
-          Per-Address Breakdown
-        </h2>
-        <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-hl-border">
-                <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-left">
-                  Address
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
-                  Portfolio Value
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
-                  All-Time Volume
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
-                  All-Time PnL
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
-                  30D Trades
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
-                  30D Fees
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading
-                ? Array.from({ length: 3 }).map((_, i) => (
-                    <tr key={i} className="border-b border-hl-border/50">
-                      {Array.from({ length: 6 }).map((_, j) => (
-                        <td key={j} className="px-4 py-3">
-                          <div className="skeleton h-4 w-20" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                : stats.map((s) => {
-                    const addrLabel = addresses.find(
-                      (a) =>
-                        a.address.toLowerCase() === s.address.toLowerCase()
-                    )?.label;
-                    const addrPortfolio = latestFromHistory(
-                      portfolioData[s.address]?.allTime?.accountValueHistory
-                    );
-                    const addrAllTimeVlm = safeNum(
-                      parseFloat(
-                        portfolioData[s.address]?.allTime?.vlm || "0"
-                      )
-                    );
-                    const addrAllTimePnl = latestFromHistory(
-                      portfolioData[s.address]?.allTime?.pnlHistory
-                    );
-                    return (
-                      <tr
-                        key={s.address}
-                        className="border-b border-hl-border/50 hover:bg-hl-bg-hover/50 transition-colors"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col">
-                            {addrLabel && (
-                              <span className="text-sm font-medium text-hl-text-primary">
-                                {addrLabel}
-                              </span>
-                            )}
-                            <span className="text-xs font-mono text-hl-text-tertiary">
-                              {s.address.slice(0, 6)}...{s.address.slice(-4)}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
-                          {formatUsd(addrPortfolio)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
-                          {formatUsd(addrAllTimeVlm)}
-                        </td>
-                        <td
-                          className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(
-                            addrAllTimePnl
-                          )}`}
-                        >
-                          {formatUsd(addrAllTimePnl)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
-                          {s.totalTrades.toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
-                          {formatUsd(
-                            safeNum(s.totalFees) +
-                              safeNum(s.totalBuilderFees)
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <PerAddressTable
+        stats={stats}
+        addresses={addresses}
+        portfolioData={portfolioData}
+        loading={loading}
+      />
 
       {/* Active Positions */}
       {!loading && stats.some((s) => s.positions.length > 0) && (
