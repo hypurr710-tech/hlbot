@@ -91,7 +91,7 @@ export default function Sidebar() {
       {/* Logo / Branding */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-hl-border">
         <Image
-          src="/hl-logo.png"
+          src="/hl-logo.png.jpg"
           alt="Hyperliquid"
           width={32}
           height={32}
@@ -138,7 +138,7 @@ export default function Sidebar() {
       <div className="px-4 py-3 border-t border-hl-border">
         <div className="flex items-center gap-3">
           <Image
-            src="/purr-avatar.png"
+            src="/purr-avatar.png.png"
             alt="Purr"
             width={36}
             height={36}

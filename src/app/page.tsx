@@ -136,7 +136,7 @@ export default function Dashboard() {
         <div className="relative mb-6">
           <div className="absolute inset-0 bg-gradient-to-t from-hl-bg-primary via-transparent to-transparent z-10 rounded-2xl" />
           <Image
-            src="/purr-main.png"
+            src="/purr-main.png.jpg"
             alt="Purr - Hyperliquid Mascot"
             width={400}
             height={240}
@@ -167,7 +167,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Image
-            src="/purr-avatar.png"
+            src="/purr-avatar.png.png"
             alt="Purr"
             width={40}
             height={40}
