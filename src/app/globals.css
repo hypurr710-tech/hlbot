@@ -1,23 +1,29 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-hl-bg-primary: #0e0e10;
-  --color-hl-bg-secondary: #16161a;
-  --color-hl-bg-tertiary: #1c1c22;
-  --color-hl-bg-hover: #22222a;
-  --color-hl-border: #2a2a35;
-  --color-hl-border-light: #35354a;
-  --color-hl-text-primary: #e8e8ea;
-  --color-hl-text-secondary: #8a8a98;
-  --color-hl-text-tertiary: #5a5a6a;
-  --color-hl-green: #25d9a0;
-  --color-hl-green-dim: #1a9e74;
+  /* Hyperliquid-style teal-tinted dark theme */
+  --color-hl-bg-primary: #0b0e11;
+  --color-hl-bg-secondary: #0f1318;
+  --color-hl-bg-tertiary: #151a21;
+  --color-hl-bg-hover: #1a2029;
+  --color-hl-bg-card: #111820;
+  --color-hl-border: #1e2a36;
+  --color-hl-border-light: #2a3a4a;
+  --color-hl-text-primary: #e8ecf0;
+  --color-hl-text-secondary: #8a99a8;
+  --color-hl-text-tertiary: #546678;
+  --color-hl-green: #50e3c2;
+  --color-hl-green-dim: #2ea88f;
+  --color-hl-green-muted: rgba(80, 227, 194, 0.12);
   --color-hl-red: #ef4466;
   --color-hl-red-dim: #b8334d;
+  --color-hl-red-muted: rgba(239, 68, 102, 0.12);
   --color-hl-blue: #4a9eff;
-  --color-hl-purple: #a855f7;
-  --color-hl-yellow: #f5c542;
-  --color-hl-accent: #25d9a0;
+  --color-hl-purple: #a78bfa;
+  --color-hl-yellow: #fbbf24;
+  --color-hl-accent: #50e3c2;
+  --color-hl-accent-dim: #3cc4a7;
+  --color-hl-glow: rgba(80, 227, 194, 0.06);
 
   --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", "Consolas", monospace;
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -35,6 +41,28 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle radial glow background */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(
+      ellipse 60% 40% at 50% 0%,
+      rgba(80, 227, 194, 0.03) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 40% 30% at 80% 20%,
+      rgba(80, 227, 194, 0.02) 0%,
+      transparent 70%
+    );
+  pointer-events: none;
+  z-index: 0;
 }
 
 @keyframes fadeIn {
@@ -55,10 +83,10 @@ body {
 @keyframes pulse-green {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(37, 217, 160, 0.3);
+    box-shadow: 0 0 0 0 rgba(80, 227, 194, 0.3);
   }
   50% {
-    box-shadow: 0 0 0 4px rgba(37, 217, 160, 0);
+    box-shadow: 0 0 0 4px rgba(80, 227, 194, 0);
   }
 }
 
@@ -85,4 +113,56 @@ body {
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 4px;
+}
+
+/* Glass card effect */
+.glass-card {
+  background: linear-gradient(
+    135deg,
+    rgba(15, 19, 24, 0.9) 0%,
+    rgba(17, 24, 32, 0.8) 100%
+  );
+  border: 1px solid var(--color-hl-border);
+  backdrop-filter: blur(12px);
+}
+
+/* Teal glow border on hover */
+.glow-hover {
+  transition: all 0.2s ease;
+}
+.glow-hover:hover {
+  border-color: rgba(80, 227, 194, 0.2);
+  box-shadow: 0 0 20px rgba(80, 227, 194, 0.05);
+}
+
+/* Hypurr branding gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #50e3c2 0%, #4a9eff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Active nav glow */
+.nav-active {
+  background: linear-gradient(
+    90deg,
+    rgba(80, 227, 194, 0.1) 0%,
+    rgba(80, 227, 194, 0.03) 100%
+  );
+  border-left: 2px solid var(--color-hl-accent);
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
 }

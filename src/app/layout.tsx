@@ -3,9 +3,9 @@ import "./globals.css";
 import ClientLayout from "./ClientLayout";
 
 export const metadata: Metadata = {
-  title: "HL Tracker - Hyperliquid MM Bot Dashboard",
+  title: "Hypurr Tracker - Hyperliquid Portfolio Dashboard",
   description:
-    "Track your Hyperliquid market making bot performance, trades, and fees",
+    "Track your Hyperliquid portfolio performance, trading volume, fees, and PnL",
 };
 
 export default function RootLayout({

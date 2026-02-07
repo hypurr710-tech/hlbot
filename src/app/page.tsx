@@ -11,6 +11,7 @@ import {
 import { formatUsd, pnlColor } from "@/lib/format";
 import StatCard from "@/components/StatCard";
 import PortfolioChart from "@/components/PortfolioChart";
+import PurrMascot from "@/components/PurrMascot";
 import Link from "next/link";
 
 /** Safely parse a number, returning 0 for NaN/undefined */
@@ -131,27 +132,15 @@ export default function Dashboard() {
   if (addresses.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
-        <div className="w-20 h-20 rounded-2xl bg-hl-bg-secondary border border-hl-border flex items-center justify-center mb-6">
-          <svg
-            className="w-10 h-10 text-hl-text-tertiary"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={1}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 4.5v15m7.5-7.5h-15"
-            />
-          </svg>
+        <div className="mb-4">
+          <PurrMascot size={100} animated />
         </div>
         <h2 className="text-xl font-semibold text-hl-text-primary mb-2">
-          No addresses tracked
+          Welcome to Hypurr Tracker
         </h2>
         <p className="text-sm text-hl-text-secondary mb-6 text-center max-w-md">
           Add your Hyperliquid wallet addresses to start tracking your
-          performance, trading volume, fees, and PnL.
+          portfolio, trading volume, fees, and PnL.
         </p>
         <Link
           href="/address"
