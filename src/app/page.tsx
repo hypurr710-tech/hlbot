@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAddresses } from "@/lib/store";
-import { getAddressStats, AddressStats } from "@/lib/hyperliquid";
+import {
+  getAddressStats,
+  getPortfolioHistory,
+  AddressStats,
+  PortfolioPeriodData,
+} from "@/lib/hyperliquid";
 import { formatUsd, pnlColor } from "@/lib/format";
 import StatCard from "@/components/StatCard";
 import PortfolioChart from "@/components/PortfolioChart";
@@ -11,36 +16,67 @@ import Link from "next/link";
 export default function Dashboard() {
   const { addresses } = useAddresses();
   const [stats, setStats] = useState<AddressStats[]>([]);
+  const [portfolioData, setPortfolioData] = useState<
+    Record<string, Record<string, PortfolioPeriodData>>
+  >({});
   const [loading, setLoading] = useState(true);
+  const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchStats = useCallback(async () => {
     if (addresses.length === 0) {
       setStats([]);
+      setPortfolioData({});
       setLoading(false);
+      setPortfolioLoading(false);
       return;
     }
     setLoading(true);
+    setPortfolioLoading(true);
     try {
-      const results = await Promise.allSettled(
-        addresses.map((a) => getAddressStats(a.address))
-      );
-      const successful = results
+      const [statsResults, portfolioResults] = await Promise.all([
+        Promise.allSettled(
+          addresses.map((a) => getAddressStats(a.address))
+        ),
+        Promise.allSettled(
+          addresses.map(async (a) => ({
+            address: a.address,
+            data: await getPortfolioHistory(a.address),
+          }))
+        ),
+      ]);
+
+      const successful = statsResults
         .filter(
           (r): r is PromiseFulfilledResult<AddressStats> =>
             r.status === "fulfilled"
         )
         .map((r) => r.value);
       setStats(successful);
+
+      const newPortfolio: Record<
+        string,
+        Record<string, PortfolioPeriodData>
+      > = {};
+      for (const r of portfolioResults) {
+        if (r.status === "fulfilled") {
+          newPortfolio[r.value.address] = r.value.data;
+        }
+      }
+      setPortfolioData(newPortfolio);
+
       setLastUpdated(new Date());
     } catch (err) {
       console.error("Failed to fetch stats:", err);
     }
     setLoading(false);
+    setPortfolioLoading(false);
   }, [addresses]);
 
   useEffect(() => {
     fetchStats();
+    const interval = setInterval(fetchStats, 30_000);
+    return () => clearInterval(interval);
   }, [fetchStats]);
 
   const totals = stats.reduce(
@@ -65,6 +101,18 @@ export default function Dashboard() {
       fundingPnl: 0,
     }
   );
+
+  // All-time volume & PnL from portfolio API
+  const allTimeVolume = Object.values(portfolioData).reduce((sum, d) => {
+    return sum + parseFloat(d.allTime?.vlm || "0");
+  }, 0);
+  const allTimePnl = Object.values(portfolioData).reduce((sum, d) => {
+    const history = d.allTime?.pnlHistory;
+    if (history && history.length > 0) {
+      return sum + parseFloat(history[history.length - 1][1]);
+    }
+    return sum;
+  }, 0);
 
   const netPnl =
     totals.realizedPnl +
@@ -118,7 +166,7 @@ export default function Dashboard() {
           </h1>
           <p className="text-sm text-hl-text-secondary mt-1">
             {addresses.length} address{addresses.length !== 1 ? "es" : ""}{" "}
-            tracked &middot; 30d overview
+            tracked
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -151,33 +199,37 @@ export default function Dashboard() {
           loading={loading}
         />
         <StatCard
-          title="Net PnL"
-          value={formatUsd(netPnl)}
-          subtitle="Realized + Unrealized - Fees"
-          loading={loading}
+          title="All-Time PnL"
+          value={formatUsd(allTimePnl)}
+          subtitle="Combined (from portfolio API)"
+          loading={portfolioLoading}
         />
         <StatCard
-          title="30D Volume"
-          value={formatUsd(totals.volume)}
-          subtitle={`${totals.trades.toLocaleString()} trades`}
-          loading={loading}
+          title="All-Time Volume"
+          value={formatUsd(allTimeVolume)}
+          subtitle={`30D: ${formatUsd(totals.volume)}`}
+          loading={portfolioLoading}
         />
         <StatCard
           title="Total Fees"
           value={formatUsd(totals.fees + totals.builderFees)}
-          subtitle="Trading + Builder fees"
+          subtitle="30D Trading + Builder fees"
           loading={loading}
         />
       </div>
 
-      {/* Portfolio Value Chart */}
-      <PortfolioChart addresses={addresses} />
+      {/* Portfolio Chart with Volume/PnL */}
+      <PortfolioChart
+        portfolioData={portfolioData}
+        loading={portfolioLoading}
+      />
 
       {/* Secondary Stats */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard
-          title="Realized PnL"
-          value={formatUsd(totals.realizedPnl)}
+          title="30D Net PnL"
+          value={formatUsd(netPnl)}
+          subtitle="Realized + Unrealized - Fees"
           loading={loading}
         />
         <StatCard
@@ -218,10 +270,10 @@ export default function Dashboard() {
                   Account Value
                 </th>
                 <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
-                  Volume
+                  All-Time Volume
                 </th>
                 <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
-                  Trades
+                  30D Trades
                 </th>
                 <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
                   Realized PnL
@@ -256,6 +308,9 @@ export default function Dashboard() {
                       s.fundingPnl -
                       s.totalFees -
                       s.totalBuilderFees;
+                    const addrAllTimeVlm = parseFloat(
+                      portfolioData[s.address]?.allTime?.vlm || "0"
+                    );
                     return (
                       <tr
                         key={s.address}
@@ -277,7 +332,7 @@ export default function Dashboard() {
                           {formatUsd(s.accountValue)}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
-                          {formatUsd(s.totalVolume)}
+                          {formatUsd(addrAllTimeVlm)}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
                           {s.totalTrades.toLocaleString()}
