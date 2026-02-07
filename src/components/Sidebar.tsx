@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
+
+const basePath = process.env.NODE_ENV === "production" ? "/hlbot" : "";
 
 const navItems = [
   {
@@ -90,12 +91,12 @@ export default function Sidebar() {
     <aside className="fixed left-0 top-0 h-full w-[220px] bg-hl-bg-secondary border-r border-hl-border flex flex-col z-50">
       {/* Logo / Branding */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-hl-border">
-        <Image
-          src="/hl-logo.png.jpg"
+        <img
+          src={`${basePath}/hl-logo.jpg`}
           alt="Hyperliquid"
           width={32}
           height={32}
-          className="rounded-lg"
+          className="rounded-lg object-cover"
         />
         <div>
           <h1 className="text-sm font-bold gradient-text tracking-tight">
@@ -137,12 +138,12 @@ export default function Sidebar() {
       {/* Bottom - Purr avatar */}
       <div className="px-4 py-3 border-t border-hl-border">
         <div className="flex items-center gap-3">
-          <Image
-            src="/purr-avatar.png.png"
+          <img
+            src={`${basePath}/purr-avatar.png`}
             alt="Purr"
             width={36}
             height={36}
-            className="rounded-full"
+            className="rounded-full object-cover"
           />
           <div className="flex-1">
             <div className="flex items-center gap-2">
