@@ -428,33 +428,6 @@ export default function Dashboard() {
         loading={portfolioLoading}
       />
 
-      {/* Secondary Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <StatCard
-          title="Perps Account"
-          value={formatUsd(totals.accountValue)}
-          subtitle="Clearinghouse value"
-          loading={loading}
-        />
-        <StatCard
-          title="Unrealized PnL"
-          value={formatUsd(totals.unrealizedPnl)}
-          loading={loading}
-        />
-        <StatCard
-          title="Funding PnL"
-          value={formatUsd(totals.fundingPnl)}
-          subtitle="30D"
-          loading={loading}
-        />
-        <StatCard
-          title="Realized PnL"
-          value={formatUsd(totals.realizedPnl)}
-          subtitle="30D"
-          loading={loading}
-        />
-      </div>
-
       {/* Per-Address Breakdown */}
       <PerAddressTable
         stats={stats}
