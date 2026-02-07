@@ -117,18 +117,18 @@ export async function getUserFills(
 }
 
 const FILLS_PAGE_LIMIT = 2000;
-const MAX_FILL_PAGES = 20;
 
-/** Fetch all fills with automatic pagination to bypass the 2000-per-request limit */
+/** Fetch fills with pagination. maxPages controls how deep to go. */
 export async function getAllUserFills(
   user: string,
   startTime: number,
-  endTime?: number
+  endTime?: number,
+  maxPages = 5
 ): Promise<Fill[]> {
   const allFills: Fill[] = [];
   let currentStart = startTime;
 
-  for (let page = 0; page < MAX_FILL_PAGES; page++) {
+  for (let page = 0; page < maxPages; page++) {
     const fills = await getUserFills(user, currentStart, endTime);
     if (fills.length === 0) break;
 
@@ -136,12 +136,38 @@ export async function getAllUserFills(
 
     if (fills.length < FILLS_PAGE_LIMIT) break;
 
-    // Next page starts after the last fill's time
     const lastTime = fills[fills.length - 1].time;
     currentStart = lastTime + 1;
   }
 
   return allFills;
+}
+
+/** Lightweight stats: only positions + clearinghouse (no fill pagination) */
+export async function getAddressStatsLight(address: string): Promise<AddressStats> {
+  const clearinghouse = await getClearinghouseState(address);
+
+  let unrealizedPnl = 0;
+  const positions: Position[] = [];
+  for (const ap of clearinghouse.assetPositions) {
+    if (parseFloat(ap.position.szi) !== 0) {
+      positions.push(ap.position);
+      unrealizedPnl += parseFloat(ap.position.unrealizedPnl);
+    }
+  }
+
+  return {
+    address,
+    totalVolume: 0,
+    totalFees: 0,
+    totalBuilderFees: 0,
+    realizedPnl: 0,
+    unrealizedPnl,
+    totalTrades: 0,
+    accountValue: parseFloat(clearinghouse.crossMarginSummary.accountValue),
+    positions,
+    fundingPnl: 0,
+  };
 }
 
 export async function getClearinghouseState(

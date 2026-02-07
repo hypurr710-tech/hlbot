@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useAddresses } from "@/lib/store";
 import { addAddress, removeAddress, saveAddresses } from "@/lib/store";
 import AddressInput from "@/components/AddressInput";
@@ -7,6 +8,8 @@ import { formatAddress } from "@/lib/format";
 
 export default function AddressPage() {
   const { addresses, setAddresses } = useAddresses();
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const handleAdd = (address: string, label: string) => {
     const updated = addAddress(address, label);
@@ -26,6 +29,35 @@ export default function AddressPage() {
     );
     saveAddresses(updated);
     setAddresses(updated);
+  };
+
+  const handleDragStart = (index: number) => {
+    setDragIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+
+  const handleDrop = (index: number) => {
+    if (dragIndex === null || dragIndex === index) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const updated = [...addresses];
+    const [moved] = updated.splice(dragIndex, 1);
+    updated.splice(index, 0, moved);
+    saveAddresses(updated);
+    setAddresses(updated);
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDragOverIndex(null);
   };
 
   return (
@@ -57,7 +89,7 @@ export default function AddressPage() {
             Tracked Addresses ({addresses.length})
           </h2>
           <p className="text-xs text-hl-text-tertiary mt-1">
-            추적 중인 주소 목록입니다. 각 주소를 클릭하면 Hypurrscan이나 Hyperliquid에서 상세 정보를 볼 수 있습니다.
+            추적 중인 주소 목록입니다. 왼쪽 핸들을 드래그하여 순서를 변경할 수 있습니다.
           </p>
         </div>
 
@@ -69,16 +101,31 @@ export default function AddressPage() {
           </div>
         ) : (
           <div className="divide-y divide-hl-border/50">
-            {addresses.map((addr) => (
+            {addresses.map((addr, index) => (
               <div
                 key={addr.address}
-                className="px-5 py-5 hover:bg-hl-bg-hover/50 transition-colors"
+                draggable
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={() => handleDrop(index)}
+                onDragEnd={handleDragEnd}
+                className={`px-5 py-5 transition-all ${
+                  dragIndex === index
+                    ? "opacity-40 scale-[0.98]"
+                    : dragOverIndex === index
+                    ? "border-t-2 border-t-hl-accent bg-hl-accent/5"
+                    : "hover:bg-hl-bg-hover/50"
+                }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4 flex-1">
-                    <div className="w-11 h-11 rounded-lg bg-hl-bg-tertiary border border-hl-border flex items-center justify-center mt-0.5">
+                    {/* Drag handle */}
+                    <div
+                      className="w-11 h-11 rounded-lg bg-hl-bg-tertiary border border-hl-border flex items-center justify-center mt-0.5 cursor-grab active:cursor-grabbing hover:border-hl-accent/50 hover:bg-hl-bg-hover transition-colors"
+                      title="드래그하여 순서 변경"
+                    >
                       <svg
-                        className="w-5 h-5 text-hl-accent"
+                        className="w-5 h-5 text-hl-text-tertiary"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -87,7 +134,7 @@ export default function AddressPage() {
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3"
+                          d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5"
                         />
                       </svg>
                     </div>
