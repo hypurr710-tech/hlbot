@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import PurrMascot from "./PurrMascot";
 
 const navItems = [
   {
@@ -89,8 +89,14 @@ export default function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 h-full w-[220px] bg-hl-bg-secondary border-r border-hl-border flex flex-col z-50">
       {/* Logo / Branding */}
-      <div className="flex items-center gap-3 px-5 h-16 border-b border-hl-border">
-        <PurrMascot size={36} />
+      <div className="flex items-center gap-3 px-4 h-16 border-b border-hl-border">
+        <Image
+          src="/hl-logo.png"
+          alt="Hyperliquid"
+          width={32}
+          height={32}
+          className="rounded-lg"
+        />
         <div>
           <h1 className="text-sm font-bold gradient-text tracking-tight">
             Hypurr Tracker
@@ -128,21 +134,30 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      {/* Bottom section */}
-      <div className="px-4 py-4 border-t border-hl-border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-hl-green pulse-green" />
-            <span className="text-[11px] text-hl-text-tertiary">Connected</span>
+      {/* Bottom - Purr avatar */}
+      <div className="px-4 py-3 border-t border-hl-border">
+        <div className="flex items-center gap-3">
+          <Image
+            src="/purr-avatar.png"
+            alt="Purr"
+            width={36}
+            height={36}
+            className="rounded-full"
+          />
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-hl-green pulse-green" />
+              <span className="text-[11px] text-hl-text-tertiary">Connected</span>
+            </div>
+            <a
+              href="https://app.hyperliquid.xyz"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-hl-accent hover:text-hl-accent/80 transition-colors"
+            >
+              app.hyperliquid.xyz
+            </a>
           </div>
-          <a
-            href="https://app.hyperliquid.xyz"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] text-hl-text-tertiary hover:text-hl-accent transition-colors"
-          >
-            Hyperliquid
-          </a>
         </div>
       </div>
     </aside>

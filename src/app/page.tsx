@@ -11,7 +11,7 @@ import {
 import { formatUsd, pnlColor } from "@/lib/format";
 import StatCard from "@/components/StatCard";
 import PortfolioChart from "@/components/PortfolioChart";
-import PurrMascot from "@/components/PurrMascot";
+import Image from "next/image";
 import Link from "next/link";
 
 /** Safely parse a number, returning 0 for NaN/undefined */
@@ -131,11 +131,20 @@ export default function Dashboard() {
 
   if (addresses.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
-        <div className="mb-4">
-          <PurrMascot size={100} animated />
+      <div className="flex flex-col items-center justify-center min-h-[70vh] animate-fade-in relative">
+        {/* Background Purr scene */}
+        <div className="relative mb-6">
+          <div className="absolute inset-0 bg-gradient-to-t from-hl-bg-primary via-transparent to-transparent z-10 rounded-2xl" />
+          <Image
+            src="/purr-main.png"
+            alt="Purr - Hyperliquid Mascot"
+            width={400}
+            height={240}
+            className="rounded-2xl opacity-80"
+            priority
+          />
         </div>
-        <h2 className="text-xl font-semibold text-hl-text-primary mb-2">
+        <h2 className="text-2xl font-bold gradient-text mb-2">
           Welcome to Hypurr Tracker
         </h2>
         <p className="text-sm text-hl-text-secondary mb-6 text-center max-w-md">
@@ -156,14 +165,23 @@ export default function Dashboard() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-hl-text-primary">
-            Dashboard
-          </h1>
-          <p className="text-sm text-hl-text-secondary mt-1">
-            {addresses.length} address{addresses.length !== 1 ? "es" : ""}{" "}
-            tracked
-          </p>
+        <div className="flex items-center gap-3">
+          <Image
+            src="/purr-avatar.png"
+            alt="Purr"
+            width={40}
+            height={40}
+            className="rounded-full"
+          />
+          <div>
+            <h1 className="text-2xl font-semibold text-hl-text-primary">
+              Dashboard
+            </h1>
+            <p className="text-sm text-hl-text-secondary mt-1">
+              {addresses.length} address{addresses.length !== 1 ? "es" : ""}{" "}
+              tracked
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {lastUpdated && (
