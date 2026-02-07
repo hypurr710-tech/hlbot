@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useAddresses } from "@/lib/store";
 import {
   getAddressStats,
+  getAddressStatsLight,
   getPortfolioHistory,
   AddressStats,
   PortfolioPeriodData,
@@ -52,14 +53,20 @@ export default function Dashboard() {
       setPortfolioLoading(true);
     }
 
-    // Fetch portfolio data first (fast API, single call per address)
+    // Phase 1: portfolio + lightweight stats (fast, no fill pagination)
     try {
-      const portfolioResults = await Promise.allSettled(
-        addresses.map(async (a) => ({
-          address: a.address,
-          data: await getPortfolioHistory(a.address),
-        }))
-      );
+      const [portfolioResults, lightStatsResults] = await Promise.all([
+        Promise.allSettled(
+          addresses.map(async (a) => ({
+            address: a.address,
+            data: await getPortfolioHistory(a.address),
+          }))
+        ),
+        Promise.allSettled(
+          addresses.map((a) => getAddressStatsLight(a.address))
+        ),
+      ]);
+
       const newPortfolio: Record<
         string,
         Record<string, PortfolioPeriodData>
@@ -71,25 +78,36 @@ export default function Dashboard() {
       }
       setPortfolioData(newPortfolio);
       setPortfolioLoading(false);
-    } catch (err) {
-      console.error("Failed to fetch portfolio:", err);
-      setPortfolioLoading(false);
-    }
 
-    // Then fetch 30D stats (slower - involves fill pagination)
-    try {
-      const statsResults = await Promise.allSettled(
-        addresses.map((a) => getAddressStats(a.address))
-      );
-      const successful = statsResults
+      // Show positions/account value immediately
+      const lightStats = lightStatsResults
         .filter(
           (r): r is PromiseFulfilledResult<AddressStats> =>
             r.status === "fulfilled"
         )
         .map((r) => r.value);
-      setStats(successful);
+      setStats(lightStats);
+      setLoading(false);
     } catch (err) {
-      console.error("Failed to fetch stats:", err);
+      console.error("Failed to fetch portfolio:", err);
+      setPortfolioLoading(false);
+      setLoading(false);
+    }
+
+    // Phase 2: full 30D stats with fills (background, slower)
+    try {
+      const fullStatsResults = await Promise.allSettled(
+        addresses.map((a) => getAddressStats(a.address))
+      );
+      const fullStats = fullStatsResults
+        .filter(
+          (r): r is PromiseFulfilledResult<AddressStats> =>
+            r.status === "fulfilled"
+        )
+        .map((r) => r.value);
+      setStats(fullStats);
+    } catch (err) {
+      console.error("Failed to fetch full stats:", err);
     }
 
     hasLoadedOnce.current = true;
@@ -99,7 +117,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, 30_000);
+    const interval = setInterval(fetchStats, 60_000);
     return () => clearInterval(interval);
   }, [fetchStats]);
 

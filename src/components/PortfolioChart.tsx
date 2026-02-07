@@ -67,6 +67,14 @@ function formatTooltipValue(value: number): string {
   return `$${Math.round(value).toLocaleString("en-US")}`;
 }
 
+function formatVolume(value: number): string {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}$${Math.round(abs)}`;
+}
+
 function mergeHistories(
   histories: PortfolioPeriodData[],
   range: PortfolioTimeRange,
@@ -239,7 +247,7 @@ export default function PortfolioChart({
           <div>
             <span className="text-xs text-hl-text-tertiary">Volume</span>
             <p className="text-lg font-semibold font-mono text-hl-text-primary">
-              {formatTooltipValue(totalVolume)}
+              {formatVolume(totalVolume)}
             </p>
           </div>
           <div>

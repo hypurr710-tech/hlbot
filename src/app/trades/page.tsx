@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAddresses } from "@/lib/store";
 import { getUserFills, Fill } from "@/lib/hyperliquid";
 import { formatUsd, formatDate, pnlColor, formatAddress } from "@/lib/format";
@@ -29,18 +29,20 @@ export default function TradesPage() {
   const [showSummary, setShowSummary] = useState(true);
   const perPage = 50;
 
+  const hasLoadedOnce = useRef(false);
+
   const fetchFills = useCallback(async () => {
     if (addresses.length === 0) {
       setFills([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!hasLoadedOnce.current) setLoading(true);
     try {
-      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      // Fetch recent fills only (no startTime = latest 2000 per address, single API call each)
       const results = await Promise.allSettled(
         addresses.map(async (a) => {
-          const f = await getUserFills(a.address, thirtyDaysAgo);
+          const f = await getUserFills(a.address);
           return f.map((fill) => ({ ...fill, wallet: a.address }));
         })
       );
@@ -52,6 +54,7 @@ export default function TradesPage() {
         .flatMap((r) => r.value)
         .sort((a, b) => b.time - a.time);
       setFills(allFills);
+      hasLoadedOnce.current = true;
     } catch (err) {
       console.error("Failed to fetch fills:", err);
     }
@@ -60,6 +63,8 @@ export default function TradesPage() {
 
   useEffect(() => {
     fetchFills();
+    const interval = setInterval(fetchFills, 60_000);
+    return () => clearInterval(interval);
   }, [fetchFills]);
 
   const coins = [...new Set(fills.map((f) => f.coin))].sort();
