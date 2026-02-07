@@ -18,9 +18,9 @@ export default function StatCard({
   loading,
 }: StatCardProps) {
   return (
-    <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-5 hover:border-hl-border-light transition-colors">
+    <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-5 glow-hover">
       <div className="flex items-start justify-between mb-3">
-        <span className="text-xs font-medium text-hl-text-secondary uppercase tracking-wider">
+        <span className="text-[11px] font-medium text-hl-text-tertiary uppercase tracking-wider">
           {title}
         </span>
         {icon && <span className="text-hl-text-tertiary">{icon}</span>}

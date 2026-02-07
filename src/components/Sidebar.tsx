@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import PurrMascot from "./PurrMascot";
 
 const navItems = [
   {
@@ -9,7 +10,7 @@ const navItems = [
     label: "Dashboard",
     icon: (
       <svg
-        className="w-5 h-5"
+        className="w-[18px] h-[18px]"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -28,7 +29,7 @@ const navItems = [
     label: "Addresses",
     icon: (
       <svg
-        className="w-5 h-5"
+        className="w-[18px] h-[18px]"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -47,7 +48,7 @@ const navItems = [
     label: "Trades",
     icon: (
       <svg
-        className="w-5 h-5"
+        className="w-[18px] h-[18px]"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -66,7 +67,7 @@ const navItems = [
     label: "Fees & Costs",
     icon: (
       <svg
-        className="w-5 h-5"
+        className="w-[18px] h-[18px]"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -87,22 +88,22 @@ export default function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 h-full w-[220px] bg-hl-bg-secondary border-r border-hl-border flex flex-col z-50">
-      {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-hl-border">
-        <div className="w-8 h-8 rounded-lg bg-hl-accent flex items-center justify-center">
-          <span className="text-hl-bg-primary font-bold text-sm">HL</span>
-        </div>
+      {/* Logo / Branding */}
+      <div className="flex items-center gap-3 px-5 h-16 border-b border-hl-border">
+        <PurrMascot size={36} />
         <div>
-          <h1 className="text-sm font-semibold text-hl-text-primary tracking-tight">
-            HL Tracker
+          <h1 className="text-sm font-bold gradient-text tracking-tight">
+            Hypurr Tracker
           </h1>
-          <p className="text-[10px] text-hl-text-tertiary">MM Bot Dashboard</p>
+          <p className="text-[10px] text-hl-text-tertiary font-medium">
+            Portfolio Dashboard
+          </p>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 px-3">
-        <ul className="space-y-1">
+      <nav className="flex-1 py-4 px-2">
+        <ul className="space-y-0.5">
           {navItems.map((item) => {
             const isActive =
               item.href === "/"
@@ -114,7 +115,7 @@ export default function Sidebar() {
                   href={item.href}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all ${
                     isActive
-                      ? "bg-hl-accent/10 text-hl-accent"
+                      ? "nav-active text-hl-accent"
                       : "text-hl-text-secondary hover:bg-hl-bg-hover hover:text-hl-text-primary"
                   }`}
                 >
@@ -127,11 +128,21 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      {/* Bottom */}
+      {/* Bottom section */}
       <div className="px-4 py-4 border-t border-hl-border">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-hl-green pulse-green" />
-          <span className="text-xs text-hl-text-tertiary">Hyperliquid API</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-hl-green pulse-green" />
+            <span className="text-[11px] text-hl-text-tertiary">Connected</span>
+          </div>
+          <a
+            href="https://app.hyperliquid.xyz"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-hl-text-tertiary hover:text-hl-accent transition-colors"
+          >
+            Hyperliquid
+          </a>
         </div>
       </div>
     </aside>

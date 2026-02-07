@@ -193,8 +193,13 @@ export default function PortfolioChart({
 
   if (Object.keys(portfolioData).length === 0 && !loading) return null;
 
+  // Updated colors to match the Hyperliquid teal theme
+  const positiveColor = "#50e3c2";
+  const negativeColor = "#ef4466";
+  const lineColor = linePositive ? positiveColor : negativeColor;
+
   return (
-    <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-6">
+    <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-6 glow-hover">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         {/* Chart Mode Tabs */}
@@ -205,7 +210,7 @@ export default function PortfolioChart({
               onClick={() => setChartMode(m.key)}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 chartMode === m.key
-                  ? "bg-hl-bg-hover text-hl-text-primary"
+                  ? "bg-hl-bg-hover text-hl-accent"
                   : "text-hl-text-tertiary hover:text-hl-text-secondary"
               }`}
             >
@@ -221,7 +226,7 @@ export default function PortfolioChart({
               onClick={() => setRange(tr.key)}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 range === tr.key
-                  ? "bg-hl-bg-hover text-hl-text-primary"
+                  ? "bg-hl-bg-hover text-hl-accent"
                   : "text-hl-text-tertiary hover:text-hl-text-secondary"
               }`}
             >
@@ -299,12 +304,12 @@ export default function PortfolioChart({
                 >
                   <stop
                     offset="0%"
-                    stopColor={linePositive ? "#25d9a0" : "#ef4466"}
-                    stopOpacity={0.3}
+                    stopColor={lineColor}
+                    stopOpacity={0.25}
                   />
                   <stop
                     offset="100%"
-                    stopColor={linePositive ? "#25d9a0" : "#ef4466"}
+                    stopColor={lineColor}
                     stopOpacity={0}
                   />
                 </linearGradient>
@@ -313,7 +318,7 @@ export default function PortfolioChart({
                 dataKey="time"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 11, fill: "#5a5a6a" }}
+                tick={{ fontSize: 11, fill: "#546678" }}
                 tickFormatter={(t: number) => formatChartTime(t, range)}
                 minTickGap={50}
               />
@@ -321,7 +326,7 @@ export default function PortfolioChart({
                 domain={yDomain}
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 11, fill: "#5a5a6a" }}
+                tick={{ fontSize: 11, fill: "#546678" }}
                 tickFormatter={(v: number) => {
                   const abs = Math.abs(v);
                   const sign = v < 0 ? "-" : "";
@@ -339,20 +344,20 @@ export default function PortfolioChart({
                   x2="100%"
                   y1="50%"
                   y2="50%"
-                  stroke="#2a2a35"
+                  stroke="#1e2a36"
                   strokeDasharray="4 4"
                 />
               )}
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#1c1c22",
-                  border: "1px solid #2a2a35",
+                  backgroundColor: "#0f1318",
+                  border: "1px solid #1e2a36",
                   borderRadius: "8px",
                   padding: "8px 12px",
                 }}
-                labelStyle={{ color: "#8a8a98", fontSize: 11 }}
+                labelStyle={{ color: "#8a99a8", fontSize: 11 }}
                 itemStyle={{
-                  color: "#e8e8ea",
+                  color: "#e8ecf0",
                   fontSize: 13,
                   fontFamily: "monospace",
                 }}
@@ -373,14 +378,14 @@ export default function PortfolioChart({
               <Area
                 type="monotone"
                 dataKey="value"
-                stroke={linePositive ? "#25d9a0" : "#ef4466"}
+                stroke={lineColor}
                 strokeWidth={2}
                 fill="url(#portfolioGradient)"
                 dot={false}
                 activeDot={{
                   r: 4,
-                  fill: linePositive ? "#25d9a0" : "#ef4466",
-                  stroke: "#0e0e10",
+                  fill: lineColor,
+                  stroke: "#0b0e11",
                   strokeWidth: 2,
                 }}
               />
