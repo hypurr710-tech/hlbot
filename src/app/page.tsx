@@ -5,6 +5,7 @@ import { useAddresses } from "@/lib/store";
 import { getAddressStats, AddressStats } from "@/lib/hyperliquid";
 import { formatUsd, pnlColor } from "@/lib/format";
 import StatCard from "@/components/StatCard";
+import PortfolioChart from "@/components/PortfolioChart";
 import Link from "next/link";
 
 export default function Dashboard() {
@@ -168,6 +169,9 @@ export default function Dashboard() {
           loading={loading}
         />
       </div>
+
+      {/* Portfolio Value Chart */}
+      <PortfolioChart addresses={addresses} />
 
       {/* Secondary Stats */}
       <div className="grid grid-cols-4 gap-4">
