@@ -37,6 +37,9 @@ export default function Dashboard() {
   const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  // Track whether this is the very first load (no data yet)
+  const isFirstLoad = stats.length === 0 && Object.keys(portfolioData).length === 0;
+
   const fetchStats = useCallback(async () => {
     if (addresses.length === 0) {
       setStats([]);
@@ -45,8 +48,12 @@ export default function Dashboard() {
       setPortfolioLoading(false);
       return;
     }
-    setLoading(true);
-    setPortfolioLoading(true);
+    // Only show loading skeleton on the very first fetch (no existing data)
+    const firstFetch = stats.length === 0;
+    if (firstFetch) {
+      setLoading(true);
+      setPortfolioLoading(true);
+    }
     try {
       const [statsResults, portfolioResults] = await Promise.all([
         Promise.allSettled(
@@ -85,7 +92,7 @@ export default function Dashboard() {
     }
     setLoading(false);
     setPortfolioLoading(false);
-  }, [addresses]);
+  }, [addresses, stats.length]);
 
   useEffect(() => {
     fetchStats();

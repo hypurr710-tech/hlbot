@@ -2,8 +2,8 @@ export function formatUsd(value: number): string {
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(2)}K`;
-  return `${sign}$${abs.toFixed(2)}`;
+  if (abs >= 1_000) return `${sign}$${Math.round(abs).toLocaleString("en-US")}`;
+  return `${sign}$${Math.round(abs).toLocaleString("en-US")}`;
 }
 
 export function formatNumber(value: number, decimals = 2): string {
