@@ -64,10 +64,7 @@ function formatChartTime(
 }
 
 function formatTooltipValue(value: number): string {
-  return `$${value.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return `$${Math.round(value).toLocaleString("en-US")}`;
 }
 
 function mergeHistories(
