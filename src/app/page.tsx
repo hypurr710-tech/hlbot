@@ -11,8 +11,9 @@ import {
 import { formatUsd, pnlColor } from "@/lib/format";
 import StatCard from "@/components/StatCard";
 import PortfolioChart from "@/components/PortfolioChart";
-import Image from "next/image";
 import Link from "next/link";
+
+const basePath = process.env.NODE_ENV === "production" ? "/hlbot" : "";
 
 /** Safely parse a number, returning 0 for NaN/undefined */
 function safeNum(val: number | undefined | null): number {
@@ -135,13 +136,10 @@ export default function Dashboard() {
         {/* Background Purr scene */}
         <div className="relative mb-6">
           <div className="absolute inset-0 bg-gradient-to-t from-hl-bg-primary via-transparent to-transparent z-10 rounded-2xl" />
-          <Image
-            src="/purr-main.png.jpg"
+          <img
+            src={`${basePath}/purr-main.jpg`}
             alt="Purr - Hyperliquid Mascot"
-            width={400}
-            height={240}
-            className="rounded-2xl opacity-80"
-            priority
+            className="rounded-2xl opacity-80 max-w-[360px] w-full"
           />
         </div>
         <h2 className="text-2xl font-bold gradient-text mb-2">
@@ -166,12 +164,12 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Image
-            src="/purr-avatar.png.png"
+          <img
+            src={`${basePath}/purr-avatar.png`}
             alt="Purr"
             width={40}
             height={40}
-            className="rounded-full"
+            className="rounded-full object-cover"
           />
           <div>
             <h1 className="text-2xl font-semibold text-hl-text-primary">
