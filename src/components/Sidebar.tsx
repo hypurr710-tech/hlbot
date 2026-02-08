@@ -90,7 +90,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         <div className="flex items-center justify-between px-4 h-16 border-b border-hl-border">
           <div className="flex items-center gap-3">
             <img
-              src="/purr-avatar.png"
+              src="/hl-logo.jpg"
               alt="Hypurr"
               width={32}
               height={32}
