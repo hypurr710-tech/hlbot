@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAddresses } from "@/lib/store";
 import {
   getAllUserFills,
+  getAddressStats,
   getClearinghouseState,
   getPortfolioHistory,
   Fill,
@@ -11,6 +12,7 @@ import {
   PortfolioPeriodData,
 } from "@/lib/hyperliquid";
 import { formatUsd, pnlColor, formatAddress } from "@/lib/format";
+import StatCard from "@/components/StatCard";
 
 type SortKey = "coin" | "trades" | "volume" | "pnl" | "fees";
 type SortDir = "asc" | "desc";
@@ -37,15 +39,16 @@ function safeNum(val: number | undefined | null): number {
 
 export default function TradesPage() {
   const { addresses } = useAddresses();
-  // All-time fills for coin summary
   const [allTimeFills, setAllTimeFills] = useState<
     (Fill & { wallet: string })[]
   >([]);
-  // Active positions
   const [positions, setPositions] = useState<WalletPosition[]>([]);
-  // Portfolio API data for accurate header stats
+
+  // Portfolio API stats (accurate, server-calculated)
   const [portfolioVolume, setPortfolioVolume] = useState<number>(0);
   const [portfolioPnl, setPortfolioPnl] = useState<number>(0);
+  const [totalFees, setTotalFees] = useState<number>(0);
+  const [totalBuilderFees, setTotalBuilderFees] = useState<number>(0);
 
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
@@ -64,6 +67,8 @@ export default function TradesPage() {
       setAllTimeFills([]);
       setPortfolioVolume(0);
       setPortfolioPnl(0);
+      setTotalFees(0);
+      setTotalBuilderFees(0);
       setLoading(false);
       setSummaryLoading(false);
       setHeaderReady(true);
@@ -76,23 +81,27 @@ export default function TradesPage() {
       setSummaryLoading(true);
     }
 
-    // Phase 1: Portfolio API (fast) + Positions (fast)
+    // Phase 1: Portfolio API + Positions + Stats (fast)
     try {
-      const [portfolioResults, positionResults] = await Promise.all([
-        Promise.allSettled(
-          addresses.map((a) => getPortfolioHistory(a.address))
-        ),
-        Promise.allSettled(
-          addresses.map(async (a) => {
-            const state = await getClearinghouseState(a.address);
-            return state.assetPositions
-              .filter((ap) => parseFloat(ap.position.szi) !== 0)
-              .map((ap) => ({ ...ap.position, wallet: a.address }));
-          })
-        ),
-      ]);
+      const [portfolioResults, positionResults, statsResults] =
+        await Promise.all([
+          Promise.allSettled(
+            addresses.map((a) => getPortfolioHistory(a.address))
+          ),
+          Promise.allSettled(
+            addresses.map(async (a) => {
+              const state = await getClearinghouseState(a.address);
+              return state.assetPositions
+                .filter((ap) => parseFloat(ap.position.szi) !== 0)
+                .map((ap) => ({ ...ap.position, wallet: a.address }));
+            })
+          ),
+          Promise.allSettled(
+            addresses.map((a) => getAddressStats(a.address))
+          ),
+        ]);
 
-      // Portfolio header stats (accurate, from server)
+      // Portfolio volume & PnL (from portfolio API - accurate)
       let totalVlm = 0;
       let totalPnl = 0;
       for (const r of portfolioResults) {
@@ -107,6 +116,19 @@ export default function TradesPage() {
       }
       setPortfolioVolume(totalVlm);
       setPortfolioPnl(totalPnl);
+
+      // Fees from stats API (fill-based, best we have)
+      let fees = 0;
+      let builderFees = 0;
+      for (const r of statsResults) {
+        if (r.status === "fulfilled") {
+          fees += safeNum(r.value.totalFees);
+          builderFees += safeNum(r.value.totalBuilderFees);
+        }
+      }
+      setTotalFees(fees);
+      setTotalBuilderFees(builderFees);
+
       setHeaderReady(true);
 
       // Active positions
@@ -123,7 +145,7 @@ export default function TradesPage() {
       setLoading(false);
     }
 
-    // Phase 2: All-time fills (slower, for coin summary)
+    // Phase 2: All-time fills (slower, for coin breakdown)
     try {
       const results = await Promise.allSettled(
         addresses.map(async (a) => {
@@ -160,7 +182,7 @@ export default function TradesPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Coin summary uses all-time fills
+  // Coin breakdown uses fills
   const allTimeFiltered = allTimeFills.filter((f) => {
     if (
       filterAddress !== "all" &&
@@ -197,17 +219,6 @@ export default function TradesPage() {
     return arr;
   }, [allTimeFiltered, sortKey, sortDir]);
 
-  // Coin summary totals (from fills - matches per-coin rows)
-  const fillVolume = coinSummaries.reduce((sum, c) => sum + c.volume, 0);
-  const fillPnl = coinSummaries.reduce((sum, c) => sum + c.pnl, 0);
-  const totalFees = coinSummaries.reduce((sum, c) => sum + c.fees, 0);
-  const totalTrades = coinSummaries.reduce((sum, c) => sum + c.trades, 0);
-
-  // Header uses portfolio API for accurate volume
-  const headerVolume =
-    headerReady && portfolioVolume > 0 ? portfolioVolume : fillVolume;
-  const headerPnl = headerReady && portfolioVolume > 0 ? portfolioPnl : fillPnl;
-
   // Filtered positions
   const filteredPositions = positions.filter((p) => {
     if (filterCoin !== "all" && p.coin !== filterCoin) return false;
@@ -235,30 +246,11 @@ export default function TradesPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h1 className="text-xl md:text-2xl font-semibold text-hl-text-primary">
-            Trade History
-          </h1>
-          <p className="text-xs md:text-sm text-hl-text-secondary mt-1">
-            {headerReady ? (
-              <>
-                {formatUsd(headerVolume)} volume &middot;{" "}
-                <span className={pnlColor(headerPnl)}>
-                  {formatUsd(headerPnl)} PnL
-                </span>
-                {" "}&middot; {formatUsd(totalFees)} fees
-                {!summaryLoading && totalTrades > 0 && (
-                  <>
-                    {" "}&middot; {totalTrades.toLocaleString()} trades
-                  </>
-                )}
-              </>
-            ) : (
-              "Loading..."
-            )}
-          </p>
-        </div>
+        <h1 className="text-xl md:text-2xl font-semibold text-hl-text-primary">
+          Trade History
+        </h1>
         <button
           onClick={fetchData}
           disabled={loading || summaryLoading}
@@ -266,6 +258,31 @@ export default function TradesPage() {
         >
           {loading || summaryLoading ? "Loading..." : "Refresh"}
         </button>
+      </div>
+
+      {/* All-Time Stats (from Portfolio API - accurate) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <StatCard
+          title="All-Time Volume"
+          value={formatUsd(portfolioVolume)}
+          loading={!headerReady}
+        />
+        <StatCard
+          title="All-Time PnL"
+          value={formatUsd(portfolioPnl)}
+          loading={!headerReady}
+        />
+        <StatCard
+          title="All-Time Fees"
+          value={formatUsd(totalFees + totalBuilderFees)}
+          subtitle={totalBuilderFees > 0 ? `Builder ${formatUsd(totalBuilderFees)}` : undefined}
+          loading={!headerReady}
+        />
+        <StatCard
+          title="Active Positions"
+          value={`${positions.length}`}
+          loading={loading}
+        />
       </div>
 
       {/* Filters */}
@@ -296,11 +313,11 @@ export default function TradesPage() {
         </select>
       </div>
 
-      {/* Coin Summary (All-Time) */}
+      {/* Coin Breakdown (from fills - per-coin detail) */}
       {summaryLoading ? (
         <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-8 text-center">
           <div className="text-sm text-hl-text-tertiary">
-            Loading coin summary...
+            Loading coin breakdown...
           </div>
         </div>
       ) : (
@@ -310,7 +327,7 @@ export default function TradesPage() {
               onClick={() => setShowSummary(!showSummary)}
               className="flex items-center gap-2 text-lg font-semibold text-hl-text-primary mb-4"
             >
-              Coin Summary (All-Time)
+              Coin Breakdown
               <span className="text-xs text-hl-text-tertiary">
                 {showSummary ? "\u25BC" : "\u25B6"} {coinSummaries.length} pairs
               </span>
@@ -323,31 +340,11 @@ export default function TradesPage() {
                       <tr className="border-b border-hl-border">
                         {(
                           [
-                            {
-                              key: "coin" as SortKey,
-                              label: "Coin",
-                              align: "left",
-                            },
-                            {
-                              key: "trades" as SortKey,
-                              label: "Trades",
-                              align: "right",
-                            },
-                            {
-                              key: "volume" as SortKey,
-                              label: "Volume",
-                              align: "right",
-                            },
-                            {
-                              key: "pnl" as SortKey,
-                              label: "Closed PnL",
-                              align: "right",
-                            },
-                            {
-                              key: "fees" as SortKey,
-                              label: "Fees",
-                              align: "right",
-                            },
+                            { key: "coin" as SortKey, label: "Coin", align: "left" },
+                            { key: "trades" as SortKey, label: "Trades", align: "right" },
+                            { key: "volume" as SortKey, label: "Volume", align: "right" },
+                            { key: "pnl" as SortKey, label: "Closed PnL", align: "right" },
+                            { key: "fees" as SortKey, label: "Fees", align: "right" },
                           ] as const
                         ).map((col) => (
                           <th
@@ -395,26 +392,6 @@ export default function TradesPage() {
                           </td>
                         </tr>
                       ))}
-                      {/* Total row - sums of per-coin rows above */}
-                      <tr className="border-t-2 border-hl-accent/30 bg-hl-bg-tertiary/50">
-                        <td className="px-4 py-3 text-sm font-semibold text-hl-accent">
-                          Total
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-mono font-semibold text-hl-text-primary">
-                          {totalTrades.toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-mono font-semibold text-hl-text-primary">
-                          {formatUsd(fillVolume)}
-                        </td>
-                        <td
-                          className={`px-4 py-3 text-right text-sm font-mono font-semibold ${pnlColor(fillPnl)}`}
-                        >
-                          {formatUsd(fillPnl)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-mono font-semibold text-hl-red">
-                          {formatUsd(totalFees)}
-                        </td>
-                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -428,7 +405,7 @@ export default function TradesPage() {
       <div>
         <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
           Active Positions
-          {positions.length > 0 && (
+          {filteredPositions.length > 0 && (
             <span className="text-xs text-hl-text-tertiary font-normal ml-2">
               {filteredPositions.length} position
               {filteredPositions.length !== 1 ? "s" : ""}
