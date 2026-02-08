@@ -214,7 +214,7 @@ export default function TradesPage() {
 
       {/* Active Positions (Hyperscan style) */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
           <h2 className="text-lg font-semibold text-hl-text-primary">
             Active Positions
             {filteredPositions.length > 0 && (
@@ -234,7 +234,119 @@ export default function TradesPage() {
             </div>
           )}
         </div>
-        <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
+        {/* Mobile: Card layout */}
+        <div className="md:hidden space-y-3">
+          {loading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="bg-hl-bg-secondary border border-hl-border rounded-xl p-4 space-y-3">
+                <div className="skeleton h-5 w-24" />
+                <div className="skeleton h-4 w-full" />
+                <div className="skeleton h-4 w-3/4" />
+              </div>
+            ))
+          ) : filteredPositions.length === 0 ? (
+            <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-8 text-center text-sm text-hl-text-tertiary">
+              {positionError ? (
+                <div>
+                  <div className="text-hl-red mb-1">Failed to load positions</div>
+                  <div className="text-xs opacity-60">{positionError}</div>
+                </div>
+              ) : (
+                "No active positions."
+              )}
+            </div>
+          ) : (
+            filteredPositions.map((p) => {
+              const size = parseFloat(p.szi);
+              const isLong = size > 0;
+              const upnl = safeNum(parseFloat(p.unrealizedPnl));
+              const posValue = Math.abs(parseFloat(p.positionValue));
+              const entryPx = p.entryPx ? parseFloat(p.entryPx) : 0;
+              const currentPx = midPrices[p.coin] ? parseFloat(midPrices[p.coin]) : 0;
+              const funding = safeNum(parseFloat(p.cumFunding.sinceOpen));
+              const liqPx = p.liquidationPx ? parseFloat(p.liquidationPx) : 0;
+              const levType = p.leverage.type === "isolated" ? "iso" : "cross";
+              const addrLabel = addresses.find(
+                (a) => a.address.toLowerCase() === p.wallet.toLowerCase()
+              )?.label;
+
+              return (
+                <div
+                  key={`mobile-${p.wallet}-${p.coin}`}
+                  className="bg-hl-bg-secondary border border-hl-border rounded-xl p-4 space-y-3"
+                >
+                  {/* Top row: Token, Side, Leverage */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-semibold text-hl-text-primary">{p.coin}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                          isLong
+                            ? "bg-hl-green/15 text-hl-green"
+                            : "bg-hl-red/15 text-hl-red"
+                        }`}
+                      >
+                        {isLong ? "LONG" : "SHORT"}
+                      </span>
+                      <span className="text-xs font-mono text-hl-yellow font-medium">
+                        {p.leverage.value}x<span className="text-hl-text-tertiary ml-0.5">{levType}</span>
+                      </span>
+                    </div>
+                    <span className={`text-sm font-mono font-semibold ${pnlColor(upnl)}`}>
+                      {formatUsd(upnl)}
+                    </span>
+                  </div>
+
+                  {/* Wallet label (multi-address) */}
+                  {addresses.length > 1 && (
+                    <div className="text-[11px] text-hl-text-tertiary -mt-1">
+                      {addrLabel || formatAddress(p.wallet)}
+                    </div>
+                  )}
+
+                  {/* Data grid */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-hl-text-tertiary">Value</span>
+                      <span className="font-mono text-hl-text-primary">{formatUsd(posValue)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-hl-text-tertiary">Amount</span>
+                      <span className={`font-mono ${isLong ? "text-hl-green" : "text-hl-red"}`}>
+                        {size.toFixed(4)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-hl-text-tertiary">Entry</span>
+                      <span className="font-mono text-hl-text-primary">
+                        {entryPx > 0 ? `$${formatPrice(entryPx)}` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-hl-text-tertiary">Price</span>
+                      <span className="font-mono text-hl-text-secondary">
+                        {currentPx > 0 ? `$${formatPrice(currentPx)}` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-hl-text-tertiary">Funding</span>
+                      <span className={`font-mono ${pnlColor(funding)}`}>{formatUsd(funding)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-hl-text-tertiary">Liq.</span>
+                      <span className="font-mono text-hl-text-tertiary">
+                        {liqPx > 0 ? `$${formatPrice(liqPx)}` : "-"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop: Table layout */}
+        <div className="hidden md:block bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px]">
               <thead>
@@ -405,13 +517,13 @@ export default function TradesPage() {
                 {/* Green accent top bar */}
                 <div className="h-[2px] bg-gradient-to-r from-hl-green/60 via-hl-green to-hl-green/60" />
                 <div className="p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-hl-green/15 flex items-center justify-center">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-5 h-5 rounded-full bg-hl-green/15 flex items-center justify-center shrink-0">
                         <div className="w-2 h-2 rounded-full bg-hl-green" />
                       </div>
-                      <span className="text-sm font-medium text-hl-text-primary">{a.label}</span>
-                      <span className="text-xs font-mono text-hl-text-tertiary">
+                      <span className="text-sm font-medium text-hl-text-primary truncate">{a.label}</span>
+                      <span className="text-xs font-mono text-hl-text-tertiary shrink-0">
                         {formatAddress(a.address)}
                       </span>
                     </div>
@@ -419,7 +531,7 @@ export default function TradesPage() {
                       href={`https://hypurrscan.io/address/${addrLower}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-hl-green/10 text-xs font-medium text-hl-green hover:bg-hl-green/20 transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-hl-green/10 text-xs font-medium text-hl-green hover:bg-hl-green/20 transition-colors self-start sm:self-auto shrink-0"
                     >
                       Open Explorer
                       <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M6 3h7v7M13 3L6 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
