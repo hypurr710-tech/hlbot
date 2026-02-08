@@ -186,12 +186,66 @@ export async function getAddressStatsLight(address: string): Promise<AddressStat
 }
 
 export async function getClearinghouseState(
-  user: string
+  user: string,
+  dex?: string
 ): Promise<ClearinghouseState> {
-  return (await postInfo({
-    type: "clearinghouseState",
-    user,
-  })) as ClearinghouseState;
+  const body: Record<string, unknown> = { type: "clearinghouseState", user };
+  if (dex !== undefined) body.dex = dex;
+  return (await postInfo(body)) as ClearinghouseState;
+}
+
+/**
+ * Get positions across all dexes (standard perps + HIP-3 dexes).
+ * First fetches recent fills to discover which HIP-3 dexes the user trades on,
+ * then queries clearinghouseState for each dex.
+ */
+export async function getAllPositions(
+  user: string
+): Promise<Position[]> {
+  // Step 1: Get recent fills to discover HIP-3 dex names
+  const recentFills = await getUserFills(user);
+  const dexNames = new Set<string>();
+  for (const fill of recentFills) {
+    const colonIdx = fill.coin.indexOf(":");
+    if (colonIdx > 0) {
+      dexNames.add(fill.coin.substring(0, colonIdx));
+    }
+  }
+
+  // Step 2: Query clearinghouseState for default dex + each HIP-3 dex
+  const dexesToQuery = ["", ...dexNames]; // "" = standard perps
+  const results = await Promise.allSettled(
+    dexesToQuery.map(async (dex) => {
+      await sleep(dex === "" ? 0 : 200); // Stagger HIP-3 dex queries
+      const state = await getClearinghouseState(user, dex);
+      if (!state.assetPositions || !Array.isArray(state.assetPositions)) {
+        return [];
+      }
+      return state.assetPositions
+        .filter((ap) => {
+          const pos = ap.position || ap;
+          return pos.szi && parseFloat(pos.szi) !== 0;
+        })
+        .map((ap) => {
+          const pos = ap.position || ap;
+          // For HIP-3, coin might not have prefix in response; add it
+          if (dex && pos.coin && !pos.coin.includes(":")) {
+            pos.coin = `${dex}:${pos.coin}`;
+          }
+          return pos;
+        });
+    })
+  );
+
+  const allPositions: Position[] = [];
+  for (const r of results) {
+    if (r.status === "fulfilled") {
+      allPositions.push(...r.value);
+    } else {
+      console.error(`[hlbot] Failed to fetch positions for dex:`, r.reason);
+    }
+  }
+  return allPositions;
 }
 
 export interface PortfolioPeriodData {
