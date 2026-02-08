@@ -204,16 +204,16 @@ export default function PortfolioChart({
   const lineColor = linePositive ? positiveColor : negativeColor;
 
   return (
-    <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-6 glow-hover">
+    <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-4 md:p-6 glow-hover">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
         {/* Chart Mode Tabs */}
         <div className="flex gap-1 bg-hl-bg-tertiary rounded-lg p-1">
           {CHART_MODES.map((m) => (
             <button
               key={m.key}
               onClick={() => setChartMode(m.key)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-2 md:px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 chartMode === m.key
                   ? "bg-hl-bg-hover text-hl-accent"
                   : "text-hl-text-tertiary hover:text-hl-text-secondary"
@@ -229,7 +229,7 @@ export default function PortfolioChart({
             <button
               key={tr.key}
               onClick={() => setRange(tr.key)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-2 md:px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 range === tr.key
                   ? "bg-hl-bg-hover text-hl-accent"
                   : "text-hl-text-tertiary hover:text-hl-text-secondary"
@@ -243,7 +243,7 @@ export default function PortfolioChart({
 
       {/* Stats row */}
       {!loading && (
-        <div className="flex items-baseline gap-6 mb-4">
+        <div className="flex items-baseline gap-4 md:gap-6 mb-4 flex-wrap">
           <div>
             <span className="text-xs text-hl-text-tertiary">Volume</span>
             <p className="text-lg font-semibold font-mono text-hl-text-primary">
@@ -284,7 +284,7 @@ export default function PortfolioChart({
       )}
 
       {/* Chart */}
-      <div className="h-64">
+      <div className="h-48 md:h-64">
         {loading ? (
           <div className="w-full h-full flex items-center justify-center">
             <div className="skeleton w-full h-full rounded-lg" />

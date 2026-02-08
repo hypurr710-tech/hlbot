@@ -65,83 +65,115 @@ const navItems = [
   },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-[220px] bg-hl-bg-secondary border-r border-hl-border flex flex-col z-50">
-      {/* Logo / Branding */}
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-hl-border">
-        <img
-          src={`${basePath}/hl-logo.jpg`}
-          alt="Hyperliquid"
-          width={32}
-          height={32}
-          className="rounded-lg object-cover"
+    <>
+      {/* Mobile overlay backdrop */}
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/60 z-50 md:hidden"
+          onClick={onClose}
         />
-        <div>
-          <h1 className="text-sm font-bold gradient-text tracking-tight">
-            Hypurr Tracker
-          </h1>
-          <p className="text-[10px] text-hl-text-tertiary font-medium">
-            Portfolio Dashboard
-          </p>
-        </div>
-      </div>
+      )}
 
-      {/* Navigation */}
-      <nav className="flex-1 py-4 px-2">
-        <ul className="space-y-0.5">
-          {navItems.map((item) => {
-            const isActive =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all ${
-                    isActive
-                      ? "nav-active text-hl-accent"
-                      : "text-hl-text-secondary hover:bg-hl-bg-hover hover:text-hl-text-primary"
-                  }`}
-                >
-                  {item.icon}
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      {/* Bottom - Purr avatar */}
-      <div className="px-4 py-3 border-t border-hl-border">
-        <div className="flex items-center gap-3">
-          <img
-            src={`${basePath}/purr-avatar.png`}
-            alt="Purr"
-            width={36}
-            height={36}
-            className="rounded-full object-cover"
-          />
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-hl-green pulse-green" />
-              <span className="text-[11px] text-hl-text-tertiary">Connected</span>
+      <aside
+        className={`fixed left-0 top-0 h-full w-[220px] bg-hl-bg-secondary border-r border-hl-border flex flex-col z-50 transition-transform duration-200 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0`}
+      >
+        {/* Logo / Branding */}
+        <div className="flex items-center justify-between px-4 h-16 border-b border-hl-border">
+          <div className="flex items-center gap-3">
+            <img
+              src={`${basePath}/purr-avatar.png`}
+              alt="Hypurr"
+              width={32}
+              height={32}
+              className="rounded-lg object-cover"
+            />
+            <div>
+              <h1 className="text-sm font-bold gradient-text tracking-tight">
+                Hypurr Tracker
+              </h1>
+              <p className="text-[10px] text-hl-text-tertiary font-medium">
+                Portfolio Dashboard
+              </p>
             </div>
-            <a
-              href="https://app.hyperliquid.xyz"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[10px] text-hl-accent hover:text-hl-accent/80 transition-colors"
-            >
-              app.hyperliquid.xyz
-            </a>
+          </div>
+          {/* Mobile close button */}
+          <button
+            onClick={onClose}
+            className="p-1 text-hl-text-tertiary hover:text-hl-text-primary md:hidden"
+            aria-label="Close menu"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 py-4 px-2">
+          <ul className="space-y-0.5">
+            {navItems.map((item) => {
+              const isActive =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(item.href);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={onClose}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all ${
+                      isActive
+                        ? "nav-active text-hl-accent"
+                        : "text-hl-text-secondary hover:bg-hl-bg-hover hover:text-hl-text-primary"
+                    }`}
+                  >
+                    {item.icon}
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        {/* Bottom - Purr avatar */}
+        <div className="px-4 py-3 border-t border-hl-border">
+          <div className="flex items-center gap-3">
+            <img
+              src={`${basePath}/purr-avatar.png`}
+              alt="Purr"
+              width={36}
+              height={36}
+              className="rounded-full object-cover"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-hl-green pulse-green" />
+                <span className="text-[11px] text-hl-text-tertiary">Connected</span>
+              </div>
+              <a
+                href="https://app.hyperliquid.xyz"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-hl-accent hover:text-hl-accent/80 transition-colors"
+              >
+                app.hyperliquid.xyz
+              </a>
+            </div>
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }

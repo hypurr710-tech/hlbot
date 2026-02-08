@@ -58,16 +58,6 @@ export interface ClearinghouseState {
   withdrawable: string;
 }
 
-export interface FundingEntry {
-  coin: string;
-  fundingRate: string;
-  szi: string;
-  time: number;
-  hash: string;
-  usdc: string;
-  nSamples?: number;
-}
-
 export interface AddressStats {
   address: string;
   totalVolume: number;
@@ -179,20 +169,6 @@ export async function getClearinghouseState(
   })) as ClearinghouseState;
 }
 
-export async function getUserFunding(
-  user: string,
-  startTime: number,
-  endTime?: number
-): Promise<FundingEntry[]> {
-  const body: Record<string, unknown> = {
-    type: "userFunding",
-    user,
-    startTime,
-  };
-  if (endTime !== undefined) body.endTime = endTime;
-  return (await postInfo(body)) as FundingEntry[];
-}
-
 export interface PortfolioPeriodData {
   accountValueHistory: [number, string][];
   pnlHistory: [number, string][];
@@ -216,12 +192,10 @@ export async function getPortfolioHistory(
 }
 
 export async function getAddressStats(address: string): Promise<AddressStats> {
-  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-
-  const [fills, clearinghouse, funding] = await Promise.all([
-    getAllUserFills(address, thirtyDaysAgo),
+  // Fetch all-time fills (from epoch) for comprehensive fee/trade data
+  const [fills, clearinghouse] = await Promise.all([
+    getAllUserFills(address, 0, undefined, 30),
     getClearinghouseState(address),
-    getUserFunding(address, thirtyDaysAgo),
   ]);
 
   let totalVolume = 0;
@@ -246,11 +220,6 @@ export async function getAddressStats(address: string): Promise<AddressStats> {
     }
   }
 
-  let fundingPnl = 0;
-  for (const f of funding) {
-    fundingPnl += parseFloat(f.usdc);
-  }
-
   return {
     address,
     totalVolume,
@@ -261,6 +230,6 @@ export async function getAddressStats(address: string): Promise<AddressStats> {
     totalTrades: fills.length,
     accountValue: parseFloat(clearinghouse.crossMarginSummary.accountValue),
     positions,
-    fundingPnl,
+    fundingPnl: 0,
   };
 }
