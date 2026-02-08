@@ -372,60 +372,78 @@ export default function TradesPage() {
         </div>
       </div>
 
-      {/* Explorer Links */}
+      {/* Hypurrscan Explorer */}
       <div>
-        <h2 className="text-lg font-semibold text-hl-text-primary mb-4">Explorer</h2>
+        <div className="flex items-center gap-3 mb-4">
+          {/* Hyperliquid logo */}
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-hl-green to-hl-green-dim flex items-center justify-center shrink-0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M7 4v16M17 4v16M7 12h10" stroke="#0b0e11" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold gradient-text">Hypurrscan Explorer</h2>
+            <p className="text-[11px] text-hl-text-tertiary">View detailed analytics on hypurrscan.io</p>
+          </div>
+        </div>
         <div className="grid gap-3">
           {addresses.map((a) => {
             const addrLower = a.address.toLowerCase();
             const tabs = [
-              { label: "Perps", hash: "#perps", icon: "\u{1F4C8}" },
-              { label: "Transactions", hash: "#transactions", icon: "\u{1F4CB}" },
-              { label: "Holdings", hash: "#holdings", icon: "\u{1F4B0}" },
-              { label: "Orders", hash: "#orders", icon: "\u{1F4DD}" },
-              { label: "Vaults", hash: "#vaults", icon: "\u{1F3E6}" },
-              { label: "Staking", hash: "#staking", icon: "\u{26A1}" },
+              { label: "Perps", hash: "#perps" },
+              { label: "Transactions", hash: "#transactions" },
+              { label: "Holdings", hash: "#holdings" },
+              { label: "Orders", hash: "#orders" },
+              { label: "Vaults", hash: "#vaults" },
+              { label: "Staking", hash: "#staking" },
             ];
             return (
               <div
                 key={a.address}
-                className="bg-hl-bg-secondary border border-hl-border rounded-xl p-4"
+                className="bg-hl-bg-secondary border border-hl-green/20 rounded-xl overflow-hidden hover:border-hl-green/40 transition-colors"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-hl-text-primary">{a.label}</span>
-                    <span className="text-xs font-mono text-hl-text-tertiary">
-                      {formatAddress(a.address)}
-                    </span>
-                  </div>
-                  <a
-                    href={`https://hypurrscan.io/address/${addrLower}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-hl-accent hover:underline"
-                  >
-                    hypurrscan.io &rarr;
-                  </a>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {tabs.map((tab) => (
+                {/* Green accent top bar */}
+                <div className="h-[2px] bg-gradient-to-r from-hl-green/60 via-hl-green to-hl-green/60" />
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-hl-green/15 flex items-center justify-center">
+                        <div className="w-2 h-2 rounded-full bg-hl-green" />
+                      </div>
+                      <span className="text-sm font-medium text-hl-text-primary">{a.label}</span>
+                      <span className="text-xs font-mono text-hl-text-tertiary">
+                        {formatAddress(a.address)}
+                      </span>
+                    </div>
                     <a
-                      key={tab.hash}
-                      href={`https://hypurrscan.io/address/${addrLower}${tab.hash}`}
+                      href={`https://hypurrscan.io/address/${addrLower}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-hl-bg-tertiary border border-hl-border rounded-lg text-xs text-hl-text-secondary hover:text-hl-text-primary hover:border-hl-accent/50 transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-hl-green/10 text-xs font-medium text-hl-green hover:bg-hl-green/20 transition-colors"
                     >
-                      <span>{tab.icon}</span>
-                      {tab.label}
+                      Open Explorer
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M6 3h7v7M13 3L6 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </a>
-                  ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {tabs.map((tab) => (
+                      <a
+                        key={tab.hash}
+                        href={`https://hypurrscan.io/address/${addrLower}${tab.hash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-hl-bg-tertiary border border-hl-border rounded-lg text-xs text-hl-text-secondary hover:text-hl-green hover:border-hl-green/40 hover:bg-hl-green/5 transition-all"
+                      >
+                        {tab.label}
+                      </a>
+                    ))}
+                  </div>
                 </div>
               </div>
             );
           })}
           {addresses.length === 0 && (
-            <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-8 text-center">
+            <div className="bg-hl-bg-secondary border border-hl-green/20 rounded-xl p-8 text-center">
               <div className="text-sm text-hl-text-tertiary">
                 No addresses configured. Add one in the Address page.
               </div>
