@@ -375,12 +375,8 @@ export default function TradesPage() {
       {/* Hypurrscan Explorer */}
       <div>
         <div className="flex items-center gap-3 mb-4">
-          {/* Hyperliquid logo */}
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-hl-green to-hl-green-dim flex items-center justify-center shrink-0">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M7 4v16M17 4v16M7 12h10" stroke="#0b0e11" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
+          {/* Purr logo */}
+          <img src="/purr-avatar.png" alt="Purr" className="w-8 h-8 rounded-lg shrink-0" />
           <div>
             <h2 className="text-lg font-semibold gradient-text">Hypurrscan Explorer</h2>
             <p className="text-[11px] text-hl-text-tertiary">View detailed analytics on hypurrscan.io</p>
