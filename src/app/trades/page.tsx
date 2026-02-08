@@ -56,6 +56,7 @@ export default function TradesPage() {
   const [loading, setLoading] = useState(true);
   const [fillsLoading, setFillsLoading] = useState(true);
   const [headerReady, setHeaderReady] = useState(false);
+  const [positionError, setPositionError] = useState<string | null>(null);
   const [filterCoin, setFilterCoin] = useState<string>("all");
   const [filterAddress, setFilterAddress] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("volume");
@@ -84,10 +85,30 @@ export default function TradesPage() {
         ),
         Promise.allSettled(
           addresses.map(async (a) => {
-            const state = await getClearinghouseState(a.address);
-            return state.assetPositions
-              .filter((ap) => parseFloat(ap.position.szi) !== 0)
-              .map((ap) => ({ ...ap.position, wallet: a.address }));
+            try {
+              const state = await getClearinghouseState(a.address);
+              console.log(`[hlbot] clearinghouseState for ${a.address.slice(0,10)}:`, {
+                assetPositions: state.assetPositions?.length ?? "undefined",
+                raw: state.assetPositions?.slice(0, 2),
+              });
+              if (!state.assetPositions || !Array.isArray(state.assetPositions)) {
+                console.warn(`[hlbot] No assetPositions array in response:`, state);
+                return [];
+              }
+              return state.assetPositions
+                .filter((ap) => {
+                  // Handle both nested {position: Position} and flat Position formats
+                  const pos = ap.position || ap;
+                  return pos.szi && parseFloat(pos.szi) !== 0;
+                })
+                .map((ap) => {
+                  const pos = ap.position || ap;
+                  return { ...pos, wallet: a.address } as WalletPosition;
+                });
+            } catch (posErr) {
+              console.error(`[hlbot] Failed to fetch positions for ${a.address.slice(0,10)}:`, posErr);
+              throw posErr;
+            }
           })
         ),
         getAllMids().catch(() => ({} as Record<string, string>)),
@@ -113,17 +134,23 @@ export default function TradesPage() {
       setHeaderReady(true);
 
       // Active positions
-      const allPositions = positionResults
-        .filter(
-          (r): r is PromiseFulfilledResult<WalletPosition[]> =>
-            r.status === "fulfilled"
-        )
-        .flatMap((r) => r.value);
+      const allPositions: WalletPosition[] = [];
+      const errors: string[] = [];
+      for (const r of positionResults) {
+        if (r.status === "fulfilled") {
+          allPositions.push(...r.value);
+        } else {
+          console.error("[hlbot] Position fetch rejected:", r.reason);
+          errors.push(String(r.reason));
+        }
+      }
       setPositions(allPositions);
+      setPositionError(errors.length > 0 ? errors.join("; ") : null);
       setLoading(false);
       setCountdown(60);
     } catch (err) {
       console.error("Failed to fetch fast data:", err);
+      setPositionError(String(err));
       setLoading(false);
     }
   }, [addresses]);
@@ -378,7 +405,14 @@ export default function TradesPage() {
                 ) : filteredPositions.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="px-4 py-8 text-center text-sm text-hl-text-tertiary">
-                      No active positions.
+                      {positionError ? (
+                        <div>
+                          <div className="text-hl-red mb-1">Failed to load positions</div>
+                          <div className="text-xs opacity-60">{positionError}</div>
+                        </div>
+                      ) : (
+                        "No active positions."
+                      )}
                     </td>
                   </tr>
                 ) : (
