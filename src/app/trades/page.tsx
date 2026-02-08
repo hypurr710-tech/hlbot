@@ -186,14 +186,15 @@ export default function TradesPage() {
     setFillsLoading(false);
   }, [addresses]);
 
-  // Initial load
+  // Initial load: Phase 1 first, then Phase 2 (prevents 429 rate limiting)
   useEffect(() => {
     fillsLoaded.current = false;
     setLoading(true);
     setFillsLoading(true);
     setHeaderReady(false);
-    fetchFastData();
-    fetchFills();
+    fetchFastData().then(() => {
+      fetchFills();
+    });
   }, [fetchFastData, fetchFills]);
 
   // Auto-refresh: only fast data every 60s
