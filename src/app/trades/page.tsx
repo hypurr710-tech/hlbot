@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAddresses } from "@/lib/store";
 import {
   getAllUserFills,
-  getAddressStats,
+  getAllMids,
   getClearinghouseState,
   getPortfolioHistory,
   Fill,
@@ -29,7 +29,6 @@ interface WalletPosition extends Position {
   wallet: string;
 }
 
-// Hyperliquid launch era
 const ALL_TIME_START = 1672531200000;
 
 function safeNum(val: number | undefined | null): number {
@@ -37,71 +36,66 @@ function safeNum(val: number | undefined | null): number {
   return val;
 }
 
+function formatPrice(val: number): string {
+  if (val >= 10000) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (val >= 100) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (val >= 1) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  return val.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+}
+
 export default function TradesPage() {
   const { addresses } = useAddresses();
-  const [allTimeFills, setAllTimeFills] = useState<
-    (Fill & { wallet: string })[]
-  >([]);
+  const [allTimeFills, setAllTimeFills] = useState<(Fill & { wallet: string })[]>([]);
   const [positions, setPositions] = useState<WalletPosition[]>([]);
+  const [midPrices, setMidPrices] = useState<Record<string, string>>({});
 
   // Portfolio API stats (accurate, server-calculated)
   const [portfolioVolume, setPortfolioVolume] = useState<number>(0);
   const [portfolioPnl, setPortfolioPnl] = useState<number>(0);
-  const [totalFees, setTotalFees] = useState<number>(0);
-  const [totalBuilderFees, setTotalBuilderFees] = useState<number>(0);
 
   const [loading, setLoading] = useState(true);
-  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [fillsLoading, setFillsLoading] = useState(true);
   const [headerReady, setHeaderReady] = useState(false);
   const [filterCoin, setFilterCoin] = useState<string>("all");
   const [filterAddress, setFilterAddress] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("volume");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [showSummary, setShowSummary] = useState(true);
+  const [countdown, setCountdown] = useState(60);
 
-  const hasLoadedOnce = useRef(false);
+  const fillsLoaded = useRef(false);
 
-  const fetchData = useCallback(async () => {
+  // Phase 1: Fast data - portfolio stats + positions + prices (runs every 60s)
+  const fetchFastData = useCallback(async () => {
     if (addresses.length === 0) {
       setPositions([]);
-      setAllTimeFills([]);
       setPortfolioVolume(0);
       setPortfolioPnl(0);
-      setTotalFees(0);
-      setTotalBuilderFees(0);
+      setMidPrices({});
       setLoading(false);
-      setSummaryLoading(false);
       setHeaderReady(true);
       return;
     }
 
-    const isFirstLoad = !hasLoadedOnce.current;
-    if (isFirstLoad) {
-      setLoading(true);
-      setSummaryLoading(true);
-    }
-
-    // Phase 1: Portfolio API + Positions + Stats (fast)
     try {
-      const [portfolioResults, positionResults, statsResults] =
-        await Promise.all([
-          Promise.allSettled(
-            addresses.map((a) => getPortfolioHistory(a.address))
-          ),
-          Promise.allSettled(
-            addresses.map(async (a) => {
-              const state = await getClearinghouseState(a.address);
-              return state.assetPositions
-                .filter((ap) => parseFloat(ap.position.szi) !== 0)
-                .map((ap) => ({ ...ap.position, wallet: a.address }));
-            })
-          ),
-          Promise.allSettled(
-            addresses.map((a) => getAddressStats(a.address))
-          ),
-        ]);
+      const [portfolioResults, positionResults, mids] = await Promise.all([
+        Promise.allSettled(
+          addresses.map((a) => getPortfolioHistory(a.address))
+        ),
+        Promise.allSettled(
+          addresses.map(async (a) => {
+            const state = await getClearinghouseState(a.address);
+            return state.assetPositions
+              .filter((ap) => parseFloat(ap.position.szi) !== 0)
+              .map((ap) => ({ ...ap.position, wallet: a.address }));
+          })
+        ),
+        getAllMids().catch(() => ({} as Record<string, string>)),
+      ]);
 
-      // Portfolio volume & PnL (from portfolio API - accurate)
+      setMidPrices(mids);
+
+      // Portfolio volume & PnL
       let totalVlm = 0;
       let totalPnl = 0;
       for (const r of portfolioResults) {
@@ -116,19 +110,6 @@ export default function TradesPage() {
       }
       setPortfolioVolume(totalVlm);
       setPortfolioPnl(totalPnl);
-
-      // Fees from stats API (fill-based, best we have)
-      let fees = 0;
-      let builderFees = 0;
-      for (const r of statsResults) {
-        if (r.status === "fulfilled") {
-          fees += safeNum(r.value.totalFees);
-          builderFees += safeNum(r.value.totalBuilderFees);
-        }
-      }
-      setTotalFees(fees);
-      setTotalBuilderFees(builderFees);
-
       setHeaderReady(true);
 
       // Active positions
@@ -140,21 +121,26 @@ export default function TradesPage() {
         .flatMap((r) => r.value);
       setPositions(allPositions);
       setLoading(false);
+      setCountdown(60);
     } catch (err) {
-      console.error("Failed to fetch Phase 1:", err);
+      console.error("Failed to fetch fast data:", err);
       setLoading(false);
     }
+  }, [addresses]);
 
-    // Phase 2: All-time fills (slower, for coin breakdown)
+  // Phase 2: Slow data - all fills for coin breakdown (runs once)
+  const fetchFills = useCallback(async () => {
+    if (addresses.length === 0) {
+      setAllTimeFills([]);
+      setFillsLoading(false);
+      return;
+    }
+
+    setFillsLoading(true);
     try {
       const results = await Promise.allSettled(
         addresses.map(async (a) => {
-          const f = await getAllUserFills(
-            a.address,
-            ALL_TIME_START,
-            undefined,
-            100
-          );
+          const f = await getAllUserFills(a.address, ALL_TIME_START, undefined, 50);
           return f.map((fill) => ({ ...fill, wallet: a.address }));
         })
       );
@@ -165,29 +151,52 @@ export default function TradesPage() {
         )
         .flatMap((r) => r.value)
         .sort((a, b) => b.time - a.time);
-      if (allFills.length > 0 || isFirstLoad) {
-        setAllTimeFills(allFills);
-      }
+      setAllTimeFills(allFills);
+      fillsLoaded.current = true;
     } catch (err) {
-      console.error("Failed to fetch all-time fills:", err);
+      console.error("Failed to fetch fills:", err);
     }
-
-    hasLoadedOnce.current = true;
-    setSummaryLoading(false);
+    setFillsLoading(false);
   }, [addresses]);
 
+  // Initial load
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 60_000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    fillsLoaded.current = false;
+    setLoading(true);
+    setFillsLoading(true);
+    setHeaderReady(false);
+    fetchFastData();
+    fetchFills();
+  }, [fetchFastData, fetchFills]);
 
-  // Coin breakdown uses fills
+  // Auto-refresh: only fast data every 60s
+  useEffect(() => {
+    const interval = setInterval(fetchFastData, 60_000);
+    return () => clearInterval(interval);
+  }, [fetchFastData]);
+
+  // Countdown timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown((prev) => (prev <= 1 ? 60 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fees calculated from fills
+  const { totalFees, totalBuilderFees } = useMemo(() => {
+    let fees = 0;
+    let builderFees = 0;
+    for (const f of allTimeFills) {
+      fees += parseFloat(f.fee);
+      builderFees += parseFloat(f.builderFee || "0");
+    }
+    return { totalFees: fees, totalBuilderFees: builderFees };
+  }, [allTimeFills]);
+
+  // Coin breakdown
   const allTimeFiltered = allTimeFills.filter((f) => {
-    if (
-      filterAddress !== "all" &&
-      f.wallet.toLowerCase() !== filterAddress.toLowerCase()
-    )
+    if (filterAddress !== "all" && f.wallet.toLowerCase() !== filterAddress.toLowerCase())
       return false;
     return true;
   });
@@ -197,13 +206,7 @@ export default function TradesPage() {
   const coinSummaries = useMemo(() => {
     const map = new Map<string, CoinSummary>();
     for (const f of allTimeFiltered) {
-      const existing = map.get(f.coin) || {
-        coin: f.coin,
-        trades: 0,
-        volume: 0,
-        pnl: 0,
-        fees: 0,
-      };
+      const existing = map.get(f.coin) || { coin: f.coin, trades: 0, volume: 0, pnl: 0, fees: 0 };
       existing.trades += 1;
       existing.volume += parseFloat(f.px) * parseFloat(f.sz);
       existing.pnl += parseFloat(f.closedPnl);
@@ -222,21 +225,24 @@ export default function TradesPage() {
   // Filtered positions
   const filteredPositions = positions.filter((p) => {
     if (filterCoin !== "all" && p.coin !== filterCoin) return false;
-    if (
-      filterAddress !== "all" &&
-      p.wallet.toLowerCase() !== filterAddress.toLowerCase()
-    )
+    if (filterAddress !== "all" && p.wallet.toLowerCase() !== filterAddress.toLowerCase())
       return false;
     return true;
   });
 
+  // Total position stats
+  const totalPositionValue = filteredPositions.reduce(
+    (sum, p) => sum + Math.abs(parseFloat(p.positionValue)),
+    0
+  );
+  const totalUPnl = filteredPositions.reduce(
+    (sum, p) => sum + parseFloat(p.unrealizedPnl),
+    0
+  );
+
   const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
+    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
   };
 
   const sortIcon = (key: SortKey) => {
@@ -251,38 +257,34 @@ export default function TradesPage() {
         <h1 className="text-xl md:text-2xl font-semibold text-hl-text-primary">
           Trade History
         </h1>
-        <button
-          onClick={fetchData}
-          disabled={loading || summaryLoading}
-          className="px-4 py-2 bg-hl-bg-tertiary border border-hl-border rounded-lg text-xs font-medium text-hl-text-secondary hover:text-hl-text-primary hover:border-hl-border-light transition-colors disabled:opacity-50"
-        >
-          {loading || summaryLoading ? "Loading..." : "Refresh"}
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-hl-text-tertiary font-mono tabular-nums">
+            {countdown}s
+          </span>
+          <button
+            onClick={() => {
+              fetchFastData();
+              if (!fillsLoaded.current) fetchFills();
+            }}
+            disabled={loading}
+            className="px-4 py-2 bg-hl-bg-tertiary border border-hl-border rounded-lg text-xs font-medium text-hl-text-secondary hover:text-hl-text-primary hover:border-hl-border-light transition-colors disabled:opacity-50"
+          >
+            {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
       </div>
 
-      {/* All-Time Stats (from Portfolio API - accurate) */}
+      {/* All-Time Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <StatCard
-          title="All-Time Volume"
-          value={formatUsd(portfolioVolume)}
-          loading={!headerReady}
-        />
-        <StatCard
-          title="All-Time PnL"
-          value={formatUsd(portfolioPnl)}
-          loading={!headerReady}
-        />
+        <StatCard title="All-Time Volume" value={formatUsd(portfolioVolume)} loading={!headerReady} />
+        <StatCard title="All-Time PnL" value={formatUsd(portfolioPnl)} loading={!headerReady} />
         <StatCard
           title="All-Time Fees"
           value={formatUsd(totalFees + totalBuilderFees)}
           subtitle={totalBuilderFees > 0 ? `Builder ${formatUsd(totalBuilderFees)}` : undefined}
-          loading={!headerReady}
+          loading={fillsLoading}
         />
-        <StatCard
-          title="Active Positions"
-          value={`${positions.length}`}
-          loading={loading}
-        />
+        <StatCard title="Active Positions" value={`${positions.length}`} loading={loading} />
       </div>
 
       {/* Filters */}
@@ -306,131 +308,53 @@ export default function TradesPage() {
         >
           <option value="all">All Coins</option>
           {coins.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
+            <option key={c} value={c}>{c}</option>
           ))}
         </select>
       </div>
 
-      {/* Coin Breakdown (from fills - per-coin detail) */}
-      {summaryLoading ? (
-        <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-8 text-center">
-          <div className="text-sm text-hl-text-tertiary">
-            Loading coin breakdown...
-          </div>
-        </div>
-      ) : (
-        coinSummaries.length > 0 && (
-          <div>
-            <button
-              onClick={() => setShowSummary(!showSummary)}
-              className="flex items-center gap-2 text-lg font-semibold text-hl-text-primary mb-4"
-            >
-              Coin Breakdown
-              <span className="text-xs text-hl-text-tertiary">
-                {showSummary ? "\u25BC" : "\u25B6"} {coinSummaries.length} pairs
-              </span>
-            </button>
-            {showSummary && (
-              <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden mb-6">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[500px]">
-                    <thead>
-                      <tr className="border-b border-hl-border">
-                        {(
-                          [
-                            { key: "coin" as SortKey, label: "Coin", align: "left" },
-                            { key: "trades" as SortKey, label: "Trades", align: "right" },
-                            { key: "volume" as SortKey, label: "Volume", align: "right" },
-                            { key: "pnl" as SortKey, label: "Closed PnL", align: "right" },
-                            { key: "fees" as SortKey, label: "Fees", align: "right" },
-                          ] as const
-                        ).map((col) => (
-                          <th
-                            key={col.key}
-                            onClick={() => handleSort(col.key)}
-                            className={`px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-${col.align} cursor-pointer hover:text-hl-accent transition-colors select-none`}
-                          >
-                            {col.label}{" "}
-                            <span className="text-hl-accent">
-                              {sortIcon(col.key)}
-                            </span>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {coinSummaries.map((c) => (
-                        <tr
-                          key={c.coin}
-                          onClick={() =>
-                            setFilterCoin(
-                              filterCoin === c.coin ? "all" : c.coin
-                            )
-                          }
-                          className={`border-b border-hl-border/50 hover:bg-hl-bg-hover/50 transition-colors cursor-pointer ${
-                            filterCoin === c.coin ? "bg-hl-accent/10" : ""
-                          }`}
-                        >
-                          <td className="px-4 py-3 text-sm font-medium text-hl-text-primary">
-                            {c.coin}
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
-                            {c.trades.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
-                            {formatUsd(c.volume)}
-                          </td>
-                          <td
-                            className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(c.pnl)}`}
-                          >
-                            {formatUsd(c.pnl)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
-                            {formatUsd(c.fees)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )
-      )}
-
-      {/* Active Positions */}
+      {/* Active Positions (Hyperscan style) */}
       <div>
-        <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
-          Active Positions
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-hl-text-primary">
+            Active Positions
+            {filteredPositions.length > 0 && (
+              <span className="text-xs text-hl-text-tertiary font-normal ml-2">
+                {filteredPositions.length} position{filteredPositions.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </h2>
           {filteredPositions.length > 0 && (
-            <span className="text-xs text-hl-text-tertiary font-normal ml-2">
-              {filteredPositions.length} position
-              {filteredPositions.length !== 1 ? "s" : ""}
-            </span>
+            <div className="flex items-center gap-4 text-xs">
+              <span className="text-hl-text-tertiary">
+                Value: <span className="text-hl-text-primary font-mono">{formatUsd(totalPositionValue)}</span>
+              </span>
+              <span className="text-hl-text-tertiary">
+                uPnL: <span className={`font-mono ${pnlColor(totalUPnl)}`}>{formatUsd(totalUPnl)}</span>
+              </span>
+            </div>
           )}
-        </h2>
+        </div>
         <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px]">
+            <table className="w-full min-w-[900px]">
               <thead>
                 <tr className="border-b border-hl-border">
                   {[
-                    { label: "Address", align: "left" },
-                    { label: "Coin", align: "left" },
-                    { label: "Side", align: "center" },
-                    { label: "Size", align: "right" },
-                    { label: "Entry Price", align: "right" },
-                    { label: "Leverage", align: "right" },
-                    { label: "Position Value", align: "right" },
-                    { label: "uPnL", align: "right" },
-                    { label: "Liq. Price", align: "right" },
+                    { label: "Token", align: "text-left" },
+                    { label: "Side", align: "text-center" },
+                    { label: "Lev.", align: "text-center" },
+                    { label: "Value", align: "text-right" },
+                    { label: "Amount", align: "text-right" },
+                    { label: "Entry", align: "text-right" },
+                    { label: "Price", align: "text-right" },
+                    { label: "PnL", align: "text-right" },
+                    { label: "Funding", align: "text-right" },
+                    { label: "Liq.", align: "text-right" },
                   ].map((col) => (
                     <th
                       key={col.label}
-                      className={`px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-${col.align}`}
+                      className={`px-3 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider ${col.align}`}
                     >
                       {col.label}
                     </th>
@@ -441,8 +365,8 @@ export default function TradesPage() {
                 {loading ? (
                   Array.from({ length: 3 }).map((_, i) => (
                     <tr key={i} className="border-b border-hl-border/50">
-                      {Array.from({ length: 9 }).map((_, j) => (
-                        <td key={j} className="px-4 py-3">
+                      {Array.from({ length: 10 }).map((_, j) => (
+                        <td key={j} className="px-3 py-3">
                           <div className="skeleton h-4 w-16" />
                         </td>
                       ))}
@@ -450,10 +374,7 @@ export default function TradesPage() {
                   ))
                 ) : filteredPositions.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-12 text-center text-sm text-hl-text-tertiary"
-                    >
+                    <td colSpan={10} className="px-4 py-8 text-center text-sm text-hl-text-tertiary">
                       No active positions.
                     </td>
                   </tr>
@@ -462,62 +383,78 @@ export default function TradesPage() {
                     const size = parseFloat(p.szi);
                     const isLong = size > 0;
                     const upnl = safeNum(parseFloat(p.unrealizedPnl));
-                    const posValue = safeNum(
-                      Math.abs(parseFloat(p.positionValue))
-                    );
+                    const posValue = Math.abs(parseFloat(p.positionValue));
+                    const entryPx = p.entryPx ? parseFloat(p.entryPx) : 0;
+                    const currentPx = midPrices[p.coin] ? parseFloat(midPrices[p.coin]) : 0;
+                    const funding = safeNum(parseFloat(p.cumFunding.sinceOpen));
+                    const liqPx = p.liquidationPx ? parseFloat(p.liquidationPx) : 0;
+                    const levType = p.leverage.type === "isolated" ? "iso" : "cross";
                     const addrLabel = addresses.find(
-                      (a) =>
-                        a.address.toLowerCase() === p.wallet.toLowerCase()
+                      (a) => a.address.toLowerCase() === p.wallet.toLowerCase()
                     )?.label;
+
                     return (
                       <tr
                         key={`${p.wallet}-${p.coin}`}
                         className="border-b border-hl-border/50 hover:bg-hl-bg-hover/50 transition-colors"
                       >
-                        <td className="px-4 py-2.5 text-xs font-mono text-hl-text-tertiary">
-                          {addrLabel || formatAddress(p.wallet)}
+                        {/* Token */}
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-hl-text-primary">{p.coin}</span>
+                            {addresses.length > 1 && (
+                              <span className="text-[10px] text-hl-text-tertiary">{addrLabel || formatAddress(p.wallet)}</span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-4 py-2.5 text-sm font-medium text-hl-text-primary">
-                          {p.coin}
-                        </td>
-                        <td className="px-4 py-2.5 text-center">
+                        {/* Side */}
+                        <td className="px-3 py-3 text-center">
                           <span
-                            className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                            className={`inline-block px-2.5 py-1 rounded text-xs font-bold ${
                               isLong
-                                ? "bg-hl-green/10 text-hl-green"
-                                : "bg-hl-red/10 text-hl-red"
+                                ? "bg-hl-green/15 text-hl-green"
+                                : "bg-hl-red/15 text-hl-red"
                             }`}
                           >
                             {isLong ? "LONG" : "SHORT"}
                           </span>
                         </td>
-                        <td
-                          className={`px-4 py-2.5 text-right text-sm font-mono ${
-                            isLong ? "text-hl-green" : "text-hl-red"
-                          }`}
-                        >
-                          {Math.abs(size).toFixed(4)}
+                        {/* Leverage */}
+                        <td className="px-3 py-3 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="text-sm font-mono text-hl-yellow font-medium">
+                              {p.leverage.value}x
+                            </span>
+                            <span className="text-[10px] text-hl-text-tertiary">{levType}</span>
+                          </div>
                         </td>
-                        <td className="px-4 py-2.5 text-right text-sm font-mono text-hl-text-primary">
-                          {p.entryPx
-                            ? `$${parseFloat(p.entryPx).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                            : "-"}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-sm font-mono text-hl-yellow">
-                          {p.leverage.value}x
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-sm font-mono text-hl-text-primary">
+                        {/* Value */}
+                        <td className="px-3 py-3 text-right text-sm font-mono font-medium text-hl-text-primary">
                           {formatUsd(posValue)}
                         </td>
-                        <td
-                          className={`px-4 py-2.5 text-right text-sm font-mono ${pnlColor(upnl)}`}
-                        >
+                        {/* Amount */}
+                        <td className={`px-3 py-3 text-right text-sm font-mono ${isLong ? "text-hl-green" : "text-hl-red"}`}>
+                          {size.toFixed(4)}
+                        </td>
+                        {/* Entry */}
+                        <td className="px-3 py-3 text-right text-sm font-mono text-hl-text-primary">
+                          {entryPx > 0 ? `$${formatPrice(entryPx)}` : "-"}
+                        </td>
+                        {/* Current Price */}
+                        <td className="px-3 py-3 text-right text-sm font-mono text-hl-text-secondary">
+                          {currentPx > 0 ? `$${formatPrice(currentPx)}` : "-"}
+                        </td>
+                        {/* PnL */}
+                        <td className={`px-3 py-3 text-right text-sm font-mono font-medium ${pnlColor(upnl)}`}>
                           {formatUsd(upnl)}
                         </td>
-                        <td className="px-4 py-2.5 text-right text-sm font-mono text-hl-text-secondary">
-                          {p.liquidationPx
-                            ? `$${parseFloat(p.liquidationPx).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                            : "-"}
+                        {/* Funding */}
+                        <td className={`px-3 py-3 text-right text-sm font-mono ${pnlColor(funding)}`}>
+                          {formatUsd(funding)}
+                        </td>
+                        {/* Liq */}
+                        <td className="px-3 py-3 text-right text-sm font-mono text-hl-text-tertiary">
+                          {liqPx > 0 ? `$${formatPrice(liqPx)}` : "-"}
                         </td>
                       </tr>
                     );
@@ -527,6 +464,82 @@ export default function TradesPage() {
             </table>
           </div>
         </div>
+      </div>
+
+      {/* Coin Breakdown */}
+      <div>
+        <button
+          onClick={() => setShowSummary(!showSummary)}
+          className="flex items-center gap-2 text-lg font-semibold text-hl-text-primary mb-4"
+        >
+          Coin Breakdown
+          <span className="text-xs text-hl-text-tertiary">
+            {showSummary ? "\u25BC" : "\u25B6"}{" "}
+            {fillsLoading ? "loading..." : `${coinSummaries.length} pairs`}
+          </span>
+        </button>
+        {showSummary &&
+          (fillsLoading ? (
+            <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-8 text-center">
+              <div className="text-sm text-hl-text-tertiary">Loading coin breakdown...</div>
+            </div>
+          ) : coinSummaries.length > 0 ? (
+            <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[500px]">
+                  <thead>
+                    <tr className="border-b border-hl-border">
+                      {([
+                        { key: "coin" as SortKey, label: "Coin", align: "text-left" },
+                        { key: "trades" as SortKey, label: "Trades", align: "text-right" },
+                        { key: "volume" as SortKey, label: "Volume", align: "text-right" },
+                        { key: "pnl" as SortKey, label: "Closed PnL", align: "text-right" },
+                        { key: "fees" as SortKey, label: "Fees", align: "text-right" },
+                      ] as const).map((col) => (
+                        <th
+                          key={col.key}
+                          onClick={() => handleSort(col.key)}
+                          className={`px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider ${col.align} cursor-pointer hover:text-hl-accent transition-colors select-none`}
+                        >
+                          {col.label}{" "}
+                          <span className="text-hl-accent">{sortIcon(col.key)}</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coinSummaries.map((c) => (
+                      <tr
+                        key={c.coin}
+                        onClick={() => setFilterCoin(filterCoin === c.coin ? "all" : c.coin)}
+                        className={`border-b border-hl-border/50 hover:bg-hl-bg-hover/50 transition-colors cursor-pointer ${
+                          filterCoin === c.coin ? "bg-hl-accent/10" : ""
+                        }`}
+                      >
+                        <td className="px-4 py-3 text-sm font-medium text-hl-text-primary">{c.coin}</td>
+                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
+                          {c.trades.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
+                          {formatUsd(c.volume)}
+                        </td>
+                        <td className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(c.pnl)}`}>
+                          {formatUsd(c.pnl)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
+                          {formatUsd(c.fees)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-8 text-center">
+              <div className="text-sm text-hl-text-tertiary">No trade history found.</div>
+            </div>
+          ))}
       </div>
     </div>
   );
