@@ -222,6 +222,9 @@ export default function TradesPage() {
     return arr;
   }, [allTimeFiltered, sortKey, sortDir]);
 
+  // Total fill-based volume for comparison
+  const fillVolume = coinSummaries.reduce((sum, c) => sum + c.volume, 0);
+
   // Filtered positions
   const filteredPositions = positions.filter((p) => {
     if (filterCoin !== "all" && p.coin !== filterCoin) return false;
@@ -478,6 +481,15 @@ export default function TradesPage() {
             {fillsLoading ? "loading..." : `${coinSummaries.length} pairs`}
           </span>
         </button>
+        {!fillsLoading && coinSummaries.length > 0 && portfolioVolume > 0 && showSummary && (
+          <div className="text-xs text-hl-text-tertiary mb-3 px-1">
+            Fill volume: {formatUsd(fillVolume)} / {formatUsd(portfolioVolume)} total
+            ({portfolioVolume > 0 ? Math.round((fillVolume / portfolioVolume) * 100) : 0}%)
+            <span className="ml-1 opacity-60">
+              — Fills API does not include liquidations, settlements, etc.
+            </span>
+          </div>
+        )}
         {showSummary &&
           (fillsLoading ? (
             <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-8 text-center">
