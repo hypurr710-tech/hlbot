@@ -1,35 +1,20 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAddresses } from "@/lib/store";
 import {
-  getAllUserFills,
   getAllMids,
   getAllPositions,
   getPortfolioHistory,
-  Fill,
   Position,
   PortfolioPeriodData,
 } from "@/lib/hyperliquid";
 import { formatUsd, pnlColor, formatAddress } from "@/lib/format";
 import StatCard from "@/components/StatCard";
 
-type SortKey = "coin" | "trades" | "volume" | "pnl" | "fees";
-type SortDir = "asc" | "desc";
-
-interface CoinSummary {
-  coin: string;
-  trades: number;
-  volume: number;
-  pnl: number;
-  fees: number;
-}
-
 interface WalletPosition extends Position {
   wallet: string;
 }
-
-const ALL_TIME_START = 1672531200000;
 
 function safeNum(val: number | undefined | null): number {
   if (val === undefined || val === null || isNaN(val)) return 0;
@@ -37,7 +22,6 @@ function safeNum(val: number | undefined | null): number {
 }
 
 function formatPrice(val: number): string {
-  if (val >= 10000) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (val >= 100) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (val >= 1) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   return val.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 6 });
@@ -45,26 +29,18 @@ function formatPrice(val: number): string {
 
 export default function TradesPage() {
   const { addresses } = useAddresses();
-  const [allTimeFills, setAllTimeFills] = useState<(Fill & { wallet: string })[]>([]);
   const [positions, setPositions] = useState<WalletPosition[]>([]);
   const [midPrices, setMidPrices] = useState<Record<string, string>>({});
 
-  // Portfolio API stats (accurate, server-calculated)
   const [portfolioVolume, setPortfolioVolume] = useState<number>(0);
   const [portfolioPnl, setPortfolioPnl] = useState<number>(0);
 
   const [loading, setLoading] = useState(true);
-  const [fillsLoading, setFillsLoading] = useState(true);
   const [headerReady, setHeaderReady] = useState(false);
   const [positionError, setPositionError] = useState<string | null>(null);
   const [filterCoin, setFilterCoin] = useState<string>("all");
   const [filterAddress, setFilterAddress] = useState<string>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("volume");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [showSummary, setShowSummary] = useState(true);
   const [countdown, setCountdown] = useState(60);
-
-  const fillsLoaded = useRef(false);
 
   // Phase 1: Fast data - portfolio stats + positions + prices (runs every 60s)
   const fetchFastData = useCallback(async () => {
@@ -139,47 +115,12 @@ export default function TradesPage() {
     }
   }, [addresses]);
 
-  // Phase 2: Slow data - all fills for coin breakdown (runs once)
-  const fetchFills = useCallback(async () => {
-    if (addresses.length === 0) {
-      setAllTimeFills([]);
-      setFillsLoading(false);
-      return;
-    }
-
-    setFillsLoading(true);
-    try {
-      const results = await Promise.allSettled(
-        addresses.map(async (a) => {
-          const f = await getAllUserFills(a.address, ALL_TIME_START, undefined, 50);
-          return f.map((fill) => ({ ...fill, wallet: a.address }));
-        })
-      );
-      const allFills = results
-        .filter(
-          (r): r is PromiseFulfilledResult<(Fill & { wallet: string })[]> =>
-            r.status === "fulfilled"
-        )
-        .flatMap((r) => r.value)
-        .sort((a, b) => b.time - a.time);
-      setAllTimeFills(allFills);
-      fillsLoaded.current = true;
-    } catch (err) {
-      console.error("Failed to fetch fills:", err);
-    }
-    setFillsLoading(false);
-  }, [addresses]);
-
-  // Initial load: Phase 1 first, then Phase 2 (prevents 429 rate limiting)
+  // Initial load
   useEffect(() => {
-    fillsLoaded.current = false;
     setLoading(true);
-    setFillsLoading(true);
     setHeaderReady(false);
-    fetchFastData().then(() => {
-      fetchFills();
-    });
-  }, [fetchFastData, fetchFills]);
+    fetchFastData();
+  }, [fetchFastData]);
 
   // Auto-refresh: only fast data every 60s
   useEffect(() => {
@@ -195,50 +136,8 @@ export default function TradesPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fees calculated from fills
-  const { totalFees, totalBuilderFees } = useMemo(() => {
-    let fees = 0;
-    let builderFees = 0;
-    for (const f of allTimeFills) {
-      fees += parseFloat(f.fee);
-      builderFees += parseFloat(f.builderFee || "0");
-    }
-    return { totalFees: fees, totalBuilderFees: builderFees };
-  }, [allTimeFills]);
-
-  // Coin breakdown
-  const allTimeFiltered = allTimeFills.filter((f) => {
-    if (filterAddress !== "all" && f.wallet.toLowerCase() !== filterAddress.toLowerCase())
-      return false;
-    return true;
-  });
-
-  const coins = [...new Set(allTimeFills.map((f) => f.coin))].sort();
-
-  const coinSummaries = useMemo(() => {
-    const map = new Map<string, CoinSummary>();
-    for (const f of allTimeFiltered) {
-      const existing = map.get(f.coin) || { coin: f.coin, trades: 0, volume: 0, pnl: 0, fees: 0 };
-      existing.trades += 1;
-      existing.volume += parseFloat(f.px) * parseFloat(f.sz);
-      existing.pnl += parseFloat(f.closedPnl);
-      existing.fees += parseFloat(f.fee);
-      map.set(f.coin, existing);
-    }
-    const arr = Array.from(map.values());
-    arr.sort((a, b) => {
-      const mul = sortDir === "asc" ? 1 : -1;
-      if (sortKey === "coin") return mul * a.coin.localeCompare(b.coin);
-      return mul * (a[sortKey] - b[sortKey]);
-    });
-    return arr;
-  }, [allTimeFiltered, sortKey, sortDir]);
-
-  // Fill totals for coin breakdown
-  const fillVolume = coinSummaries.reduce((sum, c) => sum + c.volume, 0);
-  const fillPnl = coinSummaries.reduce((sum, c) => sum + c.pnl, 0);
-  const fillFees = coinSummaries.reduce((sum, c) => sum + c.fees, 0);
-  const fillTrades = coinSummaries.reduce((sum, c) => sum + c.trades, 0);
+  // Coin list from positions
+  const coins = [...new Set(positions.map((p) => p.coin))].sort();
 
   // Filtered positions
   const filteredPositions = positions.filter((p) => {
@@ -258,16 +157,6 @@ export default function TradesPage() {
     0
   );
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("desc"); }
-  };
-
-  const sortIcon = (key: SortKey) => {
-    if (sortKey !== key) return "\u21D5";
-    return sortDir === "asc" ? "\u2191" : "\u2193";
-  };
-
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -280,10 +169,7 @@ export default function TradesPage() {
             {countdown}s
           </span>
           <button
-            onClick={() => {
-              fetchFastData();
-              if (!fillsLoaded.current) fetchFills();
-            }}
+            onClick={() => fetchFastData()}
             disabled={loading}
             className="px-4 py-2 bg-hl-bg-tertiary border border-hl-border rounded-lg text-xs font-medium text-hl-text-secondary hover:text-hl-text-primary hover:border-hl-border-light transition-colors disabled:opacity-50"
           >
@@ -296,12 +182,7 @@ export default function TradesPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatCard title="All-Time Volume" value={formatUsd(portfolioVolume)} loading={!headerReady} />
         <StatCard title="All-Time PnL" value={formatUsd(portfolioPnl)} loading={!headerReady} />
-        <StatCard
-          title="All-Time Fees"
-          value={formatUsd(totalFees + totalBuilderFees)}
-          subtitle={totalBuilderFees > 0 ? `Builder ${formatUsd(totalBuilderFees)}` : undefined}
-          loading={fillsLoading}
-        />
+        <StatCard title="Position Value" value={formatUsd(totalPositionValue)} loading={loading} />
         <StatCard title="Active Positions" value={`${positions.length}`} loading={loading} />
       </div>
 
@@ -491,96 +372,66 @@ export default function TradesPage() {
         </div>
       </div>
 
-      {/* Coin Breakdown */}
+      {/* Explorer Links */}
       <div>
-        <button
-          onClick={() => setShowSummary(!showSummary)}
-          className="flex items-center gap-2 text-lg font-semibold text-hl-text-primary mb-4"
-        >
-          Coin Breakdown
-          <span className="text-xs text-hl-text-tertiary">
-            {showSummary ? "\u25BC" : "\u25B6"}{" "}
-            {fillsLoading ? "loading..." : `${coinSummaries.length} pairs`}
-          </span>
-        </button>
-        {showSummary &&
-          (fillsLoading ? (
+        <h2 className="text-lg font-semibold text-hl-text-primary mb-4">Explorer</h2>
+        <div className="grid gap-3">
+          {addresses.map((a) => {
+            const addrLower = a.address.toLowerCase();
+            const tabs = [
+              { label: "Perps", hash: "#perps", icon: "\u{1F4C8}" },
+              { label: "Transactions", hash: "#transactions", icon: "\u{1F4CB}" },
+              { label: "Holdings", hash: "#holdings", icon: "\u{1F4B0}" },
+              { label: "Orders", hash: "#orders", icon: "\u{1F4DD}" },
+              { label: "Vaults", hash: "#vaults", icon: "\u{1F3E6}" },
+              { label: "Staking", hash: "#staking", icon: "\u{26A1}" },
+            ];
+            return (
+              <div
+                key={a.address}
+                className="bg-hl-bg-secondary border border-hl-border rounded-xl p-4"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-hl-text-primary">{a.label}</span>
+                    <span className="text-xs font-mono text-hl-text-tertiary">
+                      {formatAddress(a.address)}
+                    </span>
+                  </div>
+                  <a
+                    href={`https://hypurrscan.io/address/${addrLower}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-hl-accent hover:underline"
+                  >
+                    hypurrscan.io &rarr;
+                  </a>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {tabs.map((tab) => (
+                    <a
+                      key={tab.hash}
+                      href={`https://hypurrscan.io/address/${addrLower}${tab.hash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-hl-bg-tertiary border border-hl-border rounded-lg text-xs text-hl-text-secondary hover:text-hl-text-primary hover:border-hl-accent/50 transition-colors"
+                    >
+                      <span>{tab.icon}</span>
+                      {tab.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {addresses.length === 0 && (
             <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-8 text-center">
-              <div className="text-sm text-hl-text-tertiary">Loading coin breakdown...</div>
-            </div>
-          ) : coinSummaries.length > 0 ? (
-            <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[500px]">
-                  <thead>
-                    <tr className="border-b border-hl-border">
-                      {([
-                        { key: "coin" as SortKey, label: "Coin", align: "text-left" },
-                        { key: "trades" as SortKey, label: "Trades", align: "text-right" },
-                        { key: "volume" as SortKey, label: "Volume", align: "text-right" },
-                        { key: "pnl" as SortKey, label: "Closed PnL", align: "text-right" },
-                        { key: "fees" as SortKey, label: "Fees", align: "text-right" },
-                      ] as const).map((col) => (
-                        <th
-                          key={col.key}
-                          onClick={() => handleSort(col.key)}
-                          className={`px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider ${col.align} cursor-pointer hover:text-hl-accent transition-colors select-none`}
-                        >
-                          {col.label}{" "}
-                          <span className="text-hl-accent">{sortIcon(col.key)}</span>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {coinSummaries.map((c) => (
-                      <tr
-                        key={c.coin}
-                        onClick={() => setFilterCoin(filterCoin === c.coin ? "all" : c.coin)}
-                        className={`border-b border-hl-border/50 hover:bg-hl-bg-hover/50 transition-colors cursor-pointer ${
-                          filterCoin === c.coin ? "bg-hl-accent/10" : ""
-                        }`}
-                      >
-                        <td className="px-4 py-3 text-sm font-medium text-hl-text-primary">{c.coin}</td>
-                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
-                          {c.trades.toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
-                          {formatUsd(c.volume)}
-                        </td>
-                        <td className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(c.pnl)}`}>
-                          {formatUsd(c.pnl)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
-                          {formatUsd(c.fees)}
-                        </td>
-                      </tr>
-                    ))}
-                    {/* Total row using portfolio API for volume/PnL */}
-                    <tr className="border-t-2 border-hl-border bg-hl-bg-tertiary/30">
-                      <td className="px-4 py-3 text-sm font-bold text-hl-text-primary">Total</td>
-                      <td className="px-4 py-3 text-right text-sm font-mono font-bold text-hl-text-secondary">
-                        {fillTrades.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-mono font-bold text-hl-text-primary">
-                        {formatUsd(portfolioVolume)}
-                      </td>
-                      <td className={`px-4 py-3 text-right text-sm font-mono font-bold ${pnlColor(portfolioPnl)}`}>
-                        {formatUsd(portfolioPnl)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-mono font-bold text-hl-red">
-                        {formatUsd(totalFees + totalBuilderFees)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+              <div className="text-sm text-hl-text-tertiary">
+                No addresses configured. Add one in the Address page.
               </div>
             </div>
-          ) : (
-            <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-8 text-center">
-              <div className="text-sm text-hl-text-tertiary">No trade history found.</div>
-            </div>
-          ))}
+          )}
+        </div>
       </div>
     </div>
   );
