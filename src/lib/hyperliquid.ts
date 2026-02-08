@@ -72,21 +72,45 @@ export interface AddressStats {
 }
 
 async function postInfo(body: Record<string, unknown>, timeoutMs = 15000): Promise<unknown> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
-  } finally {
-    clearTimeout(timer);
+  const maxRetries = 3;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (res.status === 429) {
+        clearTimeout(timer);
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt + 1) * 500; // 1s, 2s, 4s
+          console.warn(`[hlbot] 429 rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`, body.type);
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        throw new Error(`API rate limited (429) after ${maxRetries} retries`);
+      }
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      return res.json();
+    } catch (err) {
+      clearTimeout(timer);
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error(`API timeout after ${timeoutMs}ms`);
+      }
+      if (attempt < maxRetries && err instanceof Error && err.message.includes("429")) {
+        continue;
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function getUserFills(
   user: string,
@@ -119,6 +143,7 @@ export async function getAllUserFills(
   let currentStart = startTime;
 
   for (let page = 0; page < maxPages; page++) {
+    if (page > 0) await sleep(300); // Rate limit protection between pages
     const fills = await getUserFills(user, currentStart, endTime);
     if (fills.length === 0) break;
 
