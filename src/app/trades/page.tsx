@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAddresses } from "@/lib/store";
 import {
-  getUserFills,
   getAllUserFills,
+  getClearinghouseState,
   getPortfolioHistory,
   Fill,
+  Position,
   PortfolioPeriodData,
 } from "@/lib/hyperliquid";
-import { formatUsd, formatDate, pnlColor, formatAddress } from "@/lib/format";
+import { formatUsd, pnlColor, formatAddress } from "@/lib/format";
 
 type SortKey = "coin" | "trades" | "volume" | "pnl" | "fees";
 type SortDir = "asc" | "desc";
@@ -22,9 +23,12 @@ interface CoinSummary {
   fees: number;
 }
 
+interface WalletPosition extends Position {
+  wallet: string;
+}
+
 // Hyperliquid launch era
 const ALL_TIME_START = 1672531200000;
-const RECENT_TRADES_LIMIT = 20;
 
 function safeNum(val: number | undefined | null): number {
   if (val === undefined || val === null || isNaN(val)) return 0;
@@ -37,10 +41,8 @@ export default function TradesPage() {
   const [allTimeFills, setAllTimeFills] = useState<
     (Fill & { wallet: string })[]
   >([]);
-  // Recent fills for trade table (latest 20)
-  const [recentFills, setRecentFills] = useState<
-    (Fill & { wallet: string })[]
-  >([]);
+  // Active positions
+  const [positions, setPositions] = useState<WalletPosition[]>([]);
   // Portfolio API data for accurate header stats
   const [portfolioVolume, setPortfolioVolume] = useState<number>(0);
   const [portfolioPnl, setPortfolioPnl] = useState<number>(0);
@@ -49,7 +51,6 @@ export default function TradesPage() {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [headerReady, setHeaderReady] = useState(false);
   const [filterCoin, setFilterCoin] = useState<string>("all");
-  const [filterSide, setFilterSide] = useState<string>("all");
   const [filterAddress, setFilterAddress] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("volume");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -59,7 +60,7 @@ export default function TradesPage() {
 
   const fetchData = useCallback(async () => {
     if (addresses.length === 0) {
-      setRecentFills([]);
+      setPositions([]);
       setAllTimeFills([]);
       setPortfolioVolume(0);
       setPortfolioPnl(0);
@@ -75,16 +76,18 @@ export default function TradesPage() {
       setSummaryLoading(true);
     }
 
-    // Phase 1: Portfolio API (fast) + Recent fills (fast)
+    // Phase 1: Portfolio API (fast) + Positions (fast)
     try {
-      const [portfolioResults, recentResults] = await Promise.all([
+      const [portfolioResults, positionResults] = await Promise.all([
         Promise.allSettled(
           addresses.map((a) => getPortfolioHistory(a.address))
         ),
         Promise.allSettled(
           addresses.map(async (a) => {
-            const f = await getUserFills(a.address);
-            return f.map((fill) => ({ ...fill, wallet: a.address }));
+            const state = await getClearinghouseState(a.address);
+            return state.assetPositions
+              .filter((ap) => parseFloat(ap.position.szi) !== 0)
+              .map((ap) => ({ ...ap.position, wallet: a.address }));
           })
         ),
       ]);
@@ -106,24 +109,21 @@ export default function TradesPage() {
       setPortfolioPnl(totalPnl);
       setHeaderReady(true);
 
-      // Recent fills for trade table
-      const recent = recentResults
+      // Active positions
+      const allPositions = positionResults
         .filter(
-          (r): r is PromiseFulfilledResult<(Fill & { wallet: string })[]> =>
+          (r): r is PromiseFulfilledResult<WalletPosition[]> =>
             r.status === "fulfilled"
         )
-        .flatMap((r) => r.value)
-        .sort((a, b) => b.time - a.time);
-      if (recent.length > 0 || isFirstLoad) {
-        setRecentFills(recent);
-      }
+        .flatMap((r) => r.value);
+      setPositions(allPositions);
       setLoading(false);
     } catch (err) {
       console.error("Failed to fetch Phase 1:", err);
       setLoading(false);
     }
 
-    // Phase 2: All-time fills (slower, unlimited pagination for coin summary)
+    // Phase 2: All-time fills (slower, for coin summary)
     try {
       const results = await Promise.allSettled(
         addresses.map(async (a) => {
@@ -197,10 +197,6 @@ export default function TradesPage() {
     return arr;
   }, [allTimeFiltered, sortKey, sortDir]);
 
-  const fillVolume = allTimeFiltered.reduce(
-    (sum, f) => sum + parseFloat(f.px) * parseFloat(f.sz),
-    0
-  );
   const totalFees = allTimeFiltered.reduce(
     (sum, f) => sum + parseFloat(f.fee),
     0
@@ -210,23 +206,21 @@ export default function TradesPage() {
     0
   );
 
-  // Use portfolio API volume for header (accurate); fallback to fills
-  const headerVolume = headerReady && portfolioVolume > 0 ? portfolioVolume : fillVolume;
+  // Use portfolio API for header (accurate)
+  const headerVolume =
+    headerReady && portfolioVolume > 0 ? portfolioVolume : 0;
   const headerPnl = headerReady && portfolioVolume > 0 ? portfolioPnl : fillPnl;
 
-  // Recent trades table uses recent fills with filters
-  const filteredRecent = recentFills.filter((f) => {
-    if (filterCoin !== "all" && f.coin !== filterCoin) return false;
-    if (filterSide !== "all" && f.side !== filterSide) return false;
+  // Filtered positions
+  const filteredPositions = positions.filter((p) => {
+    if (filterCoin !== "all" && p.coin !== filterCoin) return false;
     if (
       filterAddress !== "all" &&
-      f.wallet.toLowerCase() !== filterAddress.toLowerCase()
+      p.wallet.toLowerCase() !== filterAddress.toLowerCase()
     )
       return false;
     return true;
   });
-
-  const displayTrades = filteredRecent.slice(0, RECENT_TRADES_LIMIT);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -258,7 +252,10 @@ export default function TradesPage() {
                 </span>
                 {" "}&middot; {formatUsd(totalFees)} fees
                 {!summaryLoading && (
-                  <> &middot; {allTimeFiltered.length.toLocaleString()} trades</>
+                  <>
+                    {" "}&middot; {allTimeFiltered.length.toLocaleString()}{" "}
+                    trades
+                  </>
                 )}
               </>
             ) : (
@@ -301,15 +298,6 @@ export default function TradesPage() {
             </option>
           ))}
         </select>
-        <select
-          value={filterSide}
-          onChange={(e) => setFilterSide(e.target.value)}
-          className="bg-hl-bg-tertiary border border-hl-border rounded-lg px-3 py-2 text-xs text-hl-text-primary focus:outline-none focus:border-hl-accent/50"
-        >
-          <option value="all">All Sides</option>
-          <option value="B">Buy</option>
-          <option value="A">Sell</option>
-        </select>
       </div>
 
       {/* Coin Summary (All-Time) */}
@@ -339,11 +327,31 @@ export default function TradesPage() {
                       <tr className="border-b border-hl-border">
                         {(
                           [
-                            { key: "coin" as SortKey, label: "Coin", align: "left" },
-                            { key: "trades" as SortKey, label: "Trades", align: "right" },
-                            { key: "volume" as SortKey, label: "Volume", align: "right" },
-                            { key: "pnl" as SortKey, label: "Closed PnL", align: "right" },
-                            { key: "fees" as SortKey, label: "Fees", align: "right" },
+                            {
+                              key: "coin" as SortKey,
+                              label: "Coin",
+                              align: "left",
+                            },
+                            {
+                              key: "trades" as SortKey,
+                              label: "Trades",
+                              align: "right",
+                            },
+                            {
+                              key: "volume" as SortKey,
+                              label: "Volume",
+                              align: "right",
+                            },
+                            {
+                              key: "pnl" as SortKey,
+                              label: "Closed PnL",
+                              align: "right",
+                            },
+                            {
+                              key: "fees" as SortKey,
+                              label: "Fees",
+                              align: "right",
+                            },
                           ] as const
                         ).map((col) => (
                           <th
@@ -364,7 +372,9 @@ export default function TradesPage() {
                         <tr
                           key={c.coin}
                           onClick={() =>
-                            setFilterCoin(filterCoin === c.coin ? "all" : c.coin)
+                            setFilterCoin(
+                              filterCoin === c.coin ? "all" : c.coin
+                            )
                           }
                           className={`border-b border-hl-border/50 hover:bg-hl-bg-hover/50 transition-colors cursor-pointer ${
                             filterCoin === c.coin ? "bg-hl-accent/10" : ""
@@ -389,7 +399,7 @@ export default function TradesPage() {
                           </td>
                         </tr>
                       ))}
-                      {/* Total row */}
+                      {/* Total row - uses portfolio API volume for accuracy */}
                       <tr className="border-t-2 border-hl-accent/30 bg-hl-bg-tertiary/50">
                         <td className="px-4 py-3 text-sm font-semibold text-hl-accent">
                           Total
@@ -398,12 +408,12 @@ export default function TradesPage() {
                           {allTimeFiltered.length.toLocaleString()}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-mono font-semibold text-hl-text-primary">
-                          {formatUsd(fillVolume)}
+                          {formatUsd(headerVolume)}
                         </td>
                         <td
-                          className={`px-4 py-3 text-right text-sm font-mono font-semibold ${pnlColor(fillPnl)}`}
+                          className={`px-4 py-3 text-right text-sm font-mono font-semibold ${pnlColor(headerPnl)}`}
                         >
-                          {formatUsd(fillPnl)}
+                          {formatUsd(headerPnl)}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-mono font-semibold text-hl-red">
                           {formatUsd(totalFees)}
@@ -418,26 +428,32 @@ export default function TradesPage() {
         )
       )}
 
-      {/* Recent Trades (latest 20) */}
+      {/* Active Positions */}
       <div>
         <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
-          Recent Trades
+          Active Positions
+          {positions.length > 0 && (
+            <span className="text-xs text-hl-text-tertiary font-normal ml-2">
+              {filteredPositions.length} position
+              {filteredPositions.length !== 1 ? "s" : ""}
+            </span>
+          )}
         </h2>
         <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
+            <table className="w-full min-w-[700px]">
               <thead>
                 <tr className="border-b border-hl-border">
                   {[
-                    { label: "Time", align: "left" },
                     { label: "Address", align: "left" },
                     { label: "Coin", align: "left" },
                     { label: "Side", align: "center" },
                     { label: "Size", align: "right" },
-                    { label: "Price", align: "right" },
-                    { label: "Notional", align: "right" },
-                    { label: "Fee", align: "right" },
-                    { label: "Closed PnL", align: "right" },
+                    { label: "Entry Price", align: "right" },
+                    { label: "Leverage", align: "right" },
+                    { label: "Position Value", align: "right" },
+                    { label: "uPnL", align: "right" },
+                    { label: "Liq. Price", align: "right" },
                   ].map((col) => (
                     <th
                       key={col.label}
@@ -450,7 +466,7 @@ export default function TradesPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  Array.from({ length: 10 }).map((_, i) => (
+                  Array.from({ length: 3 }).map((_, i) => (
                     <tr key={i} className="border-b border-hl-border/50">
                       {Array.from({ length: 9 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
@@ -459,68 +475,76 @@ export default function TradesPage() {
                       ))}
                     </tr>
                   ))
-                ) : displayTrades.length === 0 ? (
+                ) : filteredPositions.length === 0 ? (
                   <tr>
                     <td
                       colSpan={9}
                       className="px-4 py-12 text-center text-sm text-hl-text-tertiary"
                     >
-                      {filterCoin !== "all" || filterSide !== "all"
-                        ? "No trades match the current filters."
-                        : "No trades found. Add addresses to track trading activity."}
+                      No active positions.
                     </td>
                   </tr>
                 ) : (
-                  displayTrades.map((fill) => {
-                    const notional =
-                      parseFloat(fill.px) * parseFloat(fill.sz);
-                    const closedPnl = parseFloat(fill.closedPnl);
-                    const fee = parseFloat(fill.fee);
+                  filteredPositions.map((p) => {
+                    const size = parseFloat(p.szi);
+                    const isLong = size > 0;
+                    const upnl = safeNum(parseFloat(p.unrealizedPnl));
+                    const posValue = safeNum(
+                      Math.abs(parseFloat(p.positionValue))
+                    );
                     const addrLabel = addresses.find(
                       (a) =>
-                        a.address.toLowerCase() === fill.wallet.toLowerCase()
+                        a.address.toLowerCase() === p.wallet.toLowerCase()
                     )?.label;
                     return (
                       <tr
-                        key={`${fill.tid}-${fill.hash}`}
+                        key={`${p.wallet}-${p.coin}`}
                         className="border-b border-hl-border/50 hover:bg-hl-bg-hover/50 transition-colors"
                       >
-                        <td className="px-4 py-2.5 text-xs text-hl-text-secondary whitespace-nowrap">
-                          {formatDate(fill.time)}
-                        </td>
                         <td className="px-4 py-2.5 text-xs font-mono text-hl-text-tertiary">
-                          {addrLabel || formatAddress(fill.wallet)}
+                          {addrLabel || formatAddress(p.wallet)}
                         </td>
                         <td className="px-4 py-2.5 text-sm font-medium text-hl-text-primary">
-                          {fill.coin}
+                          {p.coin}
                         </td>
                         <td className="px-4 py-2.5 text-center">
                           <span
                             className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                              fill.side === "B"
+                              isLong
                                 ? "bg-hl-green/10 text-hl-green"
                                 : "bg-hl-red/10 text-hl-red"
                             }`}
                           >
-                            {fill.side === "B" ? "BUY" : "SELL"}
+                            {isLong ? "LONG" : "SHORT"}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-right text-sm font-mono text-hl-text-primary">
-                          {parseFloat(fill.sz).toFixed(4)}
+                        <td
+                          className={`px-4 py-2.5 text-right text-sm font-mono ${
+                            isLong ? "text-hl-green" : "text-hl-red"
+                          }`}
+                        >
+                          {Math.abs(size).toFixed(4)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-sm font-mono text-hl-text-primary">
-                          ${parseFloat(fill.px).toFixed(2)}
+                          {p.entryPx
+                            ? `$${parseFloat(p.entryPx).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : "-"}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-sm font-mono text-hl-yellow">
+                          {p.leverage.value}x
                         </td>
                         <td className="px-4 py-2.5 text-right text-sm font-mono text-hl-text-primary">
-                          {formatUsd(notional)}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-sm font-mono text-hl-red-dim">
-                          {formatUsd(fee)}
+                          {formatUsd(posValue)}
                         </td>
                         <td
-                          className={`px-4 py-2.5 text-right text-sm font-mono ${pnlColor(closedPnl)}`}
+                          className={`px-4 py-2.5 text-right text-sm font-mono ${pnlColor(upnl)}`}
                         >
-                          {closedPnl !== 0 ? formatUsd(closedPnl) : "-"}
+                          {formatUsd(upnl)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-sm font-mono text-hl-text-secondary">
+                          {p.liquidationPx
+                            ? `$${parseFloat(p.liquidationPx).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : "-"}
                         </td>
                       </tr>
                     );
