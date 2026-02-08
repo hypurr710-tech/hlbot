@@ -197,18 +197,15 @@ export default function TradesPage() {
     return arr;
   }, [allTimeFiltered, sortKey, sortDir]);
 
-  const totalFees = allTimeFiltered.reduce(
-    (sum, f) => sum + parseFloat(f.fee),
-    0
-  );
-  const fillPnl = allTimeFiltered.reduce(
-    (sum, f) => sum + parseFloat(f.closedPnl),
-    0
-  );
+  // Coin summary totals (from fills - matches per-coin rows)
+  const fillVolume = coinSummaries.reduce((sum, c) => sum + c.volume, 0);
+  const fillPnl = coinSummaries.reduce((sum, c) => sum + c.pnl, 0);
+  const totalFees = coinSummaries.reduce((sum, c) => sum + c.fees, 0);
+  const totalTrades = coinSummaries.reduce((sum, c) => sum + c.trades, 0);
 
-  // Use portfolio API for header (accurate)
+  // Header uses portfolio API for accurate volume
   const headerVolume =
-    headerReady && portfolioVolume > 0 ? portfolioVolume : 0;
+    headerReady && portfolioVolume > 0 ? portfolioVolume : fillVolume;
   const headerPnl = headerReady && portfolioVolume > 0 ? portfolioPnl : fillPnl;
 
   // Filtered positions
@@ -251,10 +248,9 @@ export default function TradesPage() {
                   {formatUsd(headerPnl)} PnL
                 </span>
                 {" "}&middot; {formatUsd(totalFees)} fees
-                {!summaryLoading && (
+                {!summaryLoading && totalTrades > 0 && (
                   <>
-                    {" "}&middot; {allTimeFiltered.length.toLocaleString()}{" "}
-                    trades
+                    {" "}&middot; {totalTrades.toLocaleString()} trades
                   </>
                 )}
               </>
@@ -399,21 +395,21 @@ export default function TradesPage() {
                           </td>
                         </tr>
                       ))}
-                      {/* Total row - uses portfolio API volume for accuracy */}
+                      {/* Total row - sums of per-coin rows above */}
                       <tr className="border-t-2 border-hl-accent/30 bg-hl-bg-tertiary/50">
                         <td className="px-4 py-3 text-sm font-semibold text-hl-accent">
                           Total
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-mono font-semibold text-hl-text-primary">
-                          {allTimeFiltered.length.toLocaleString()}
+                          {totalTrades.toLocaleString()}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-mono font-semibold text-hl-text-primary">
-                          {formatUsd(headerVolume)}
+                          {formatUsd(fillVolume)}
                         </td>
                         <td
-                          className={`px-4 py-3 text-right text-sm font-mono font-semibold ${pnlColor(headerPnl)}`}
+                          className={`px-4 py-3 text-right text-sm font-mono font-semibold ${pnlColor(fillPnl)}`}
                         >
-                          {formatUsd(headerPnl)}
+                          {formatUsd(fillPnl)}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-mono font-semibold text-hl-red">
                           {formatUsd(totalFees)}
