@@ -14,8 +14,6 @@ import StatCard from "@/components/StatCard";
 import PortfolioChart from "@/components/PortfolioChart";
 import Link from "next/link";
 
-const basePath = process.env.NODE_ENV === "production" ? "/hlbot" : "";
-
 /** Safely parse a number, returning 0 for NaN/undefined */
 function safeNum(val: number | undefined | null): number {
   if (val === undefined || val === null || isNaN(val)) return 0;
@@ -209,8 +207,11 @@ export default function Dashboard() {
       setPortfolioLoading(false);
       return;
     }
+
+    const isFirstLoad = !hasLoadedOnce.current;
+
     // Only show loading skeleton on the very first fetch
-    if (!hasLoadedOnce.current) {
+    if (isFirstLoad) {
       setLoading(true);
       setPortfolioLoading(true);
     }
@@ -241,22 +242,24 @@ export default function Dashboard() {
       setPortfolioData(newPortfolio);
       setPortfolioLoading(false);
 
-      // Show positions/account value immediately
-      const lightStats = lightStatsResults
-        .filter(
-          (r): r is PromiseFulfilledResult<AddressStats> =>
-            r.status === "fulfilled"
-        )
-        .map((r) => r.value);
-      setStats(lightStats);
-      setLoading(false);
+      // Only use light stats on first load; on refresh keep existing full data
+      if (isFirstLoad) {
+        const lightStats = lightStatsResults
+          .filter(
+            (r): r is PromiseFulfilledResult<AddressStats> =>
+              r.status === "fulfilled"
+          )
+          .map((r) => r.value);
+        setStats(lightStats);
+        setLoading(false);
+      }
     } catch (err) {
       console.error("Failed to fetch portfolio:", err);
       setPortfolioLoading(false);
       setLoading(false);
     }
 
-    // Phase 2: full 30D stats with fills (background, slower)
+    // Phase 2: full all-time stats with fills (background, slower)
     try {
       const fullStatsResults = await Promise.allSettled(
         addresses.map((a) => getAddressStats(a.address))
@@ -267,7 +270,9 @@ export default function Dashboard() {
             r.status === "fulfilled"
         )
         .map((r) => r.value);
-      setStats(fullStats);
+      if (fullStats.length > 0) {
+        setStats(fullStats);
+      }
     } catch (err) {
       console.error("Failed to fetch full stats:", err);
     }
@@ -325,7 +330,7 @@ export default function Dashboard() {
         <div className="relative mb-6">
           <div className="absolute inset-0 bg-gradient-to-t from-hl-bg-primary via-transparent to-transparent z-10 rounded-2xl" />
           <img
-            src={`${basePath}/purr-main.jpg`}
+            src="/purr-main.jpg"
             alt="Purr - Hyperliquid Mascot"
             className="rounded-2xl opacity-80 max-w-[360px] w-full"
           />
@@ -353,7 +358,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
           <img
-            src={`${basePath}/purr-avatar.png`}
+            src="/purr-avatar.png"
             alt="Purr"
             width={40}
             height={40}
