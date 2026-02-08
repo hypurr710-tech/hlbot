@@ -5,7 +5,7 @@ import { useAddresses } from "@/lib/store";
 import {
   getAllUserFills,
   getAllMids,
-  getClearinghouseState,
+  getAllPositions,
   getPortfolioHistory,
   Fill,
   Position,
@@ -86,25 +86,9 @@ export default function TradesPage() {
         Promise.allSettled(
           addresses.map(async (a) => {
             try {
-              const state = await getClearinghouseState(a.address);
-              console.log(`[hlbot] clearinghouseState for ${a.address.slice(0,10)}:`, {
-                assetPositions: state.assetPositions?.length ?? "undefined",
-                raw: state.assetPositions?.slice(0, 2),
-              });
-              if (!state.assetPositions || !Array.isArray(state.assetPositions)) {
-                console.warn(`[hlbot] No assetPositions array in response:`, state);
-                return [];
-              }
-              return state.assetPositions
-                .filter((ap) => {
-                  // Handle both nested {position: Position} and flat Position formats
-                  const pos = ap.position || ap;
-                  return pos.szi && parseFloat(pos.szi) !== 0;
-                })
-                .map((ap) => {
-                  const pos = ap.position || ap;
-                  return { ...pos, wallet: a.address } as WalletPosition;
-                });
+              const positions = await getAllPositions(a.address);
+              console.log(`[hlbot] positions for ${a.address.slice(0, 10)}:`, positions.length, positions.map(p => p.coin));
+              return positions.map((p) => ({ ...p, wallet: a.address } as WalletPosition));
             } catch (posErr) {
               console.error(`[hlbot] Failed to fetch positions for ${a.address.slice(0,10)}:`, posErr);
               throw posErr;
@@ -250,8 +234,21 @@ export default function TradesPage() {
     return arr;
   }, [allTimeFiltered, sortKey, sortDir]);
 
-  // Total fill-based volume for comparison
+  // Add "Other" row so coin breakdown total matches All-Time Volume
   const fillVolume = coinSummaries.reduce((sum, c) => sum + c.volume, 0);
+  const fillPnl = coinSummaries.reduce((sum, c) => sum + c.pnl, 0);
+  const fillFees = coinSummaries.reduce((sum, c) => sum + c.fees, 0);
+  const otherVolume = portfolioVolume - fillVolume;
+
+  const coinSummariesWithOther = useMemo(() => {
+    if (!fillsLoading && otherVolume > 1 && coinSummaries.length > 0) {
+      return [
+        ...coinSummaries,
+        { coin: "Other (liquidations, etc.)", trades: 0, volume: otherVolume, pnl: portfolioPnl - fillPnl, fees: 0 },
+      ];
+    }
+    return coinSummaries;
+  }, [coinSummaries, fillsLoading, otherVolume, portfolioPnl, fillPnl]);
 
   // Filtered positions
   const filteredPositions = positions.filter((p) => {
@@ -516,21 +513,12 @@ export default function TradesPage() {
             {fillsLoading ? "loading..." : `${coinSummaries.length} pairs`}
           </span>
         </button>
-        {!fillsLoading && coinSummaries.length > 0 && portfolioVolume > 0 && showSummary && (
-          <div className="text-xs text-hl-text-tertiary mb-3 px-1">
-            Fill volume: {formatUsd(fillVolume)} / {formatUsd(portfolioVolume)} total
-            ({portfolioVolume > 0 ? Math.round((fillVolume / portfolioVolume) * 100) : 0}%)
-            <span className="ml-1 opacity-60">
-              — Fills API does not include liquidations, settlements, etc.
-            </span>
-          </div>
-        )}
         {showSummary &&
           (fillsLoading ? (
             <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-8 text-center">
               <div className="text-sm text-hl-text-tertiary">Loading coin breakdown...</div>
             </div>
-          ) : coinSummaries.length > 0 ? (
+          ) : coinSummariesWithOther.length > 0 ? (
             <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[500px]">
@@ -555,29 +543,34 @@ export default function TradesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {coinSummaries.map((c) => (
-                      <tr
-                        key={c.coin}
-                        onClick={() => setFilterCoin(filterCoin === c.coin ? "all" : c.coin)}
-                        className={`border-b border-hl-border/50 hover:bg-hl-bg-hover/50 transition-colors cursor-pointer ${
-                          filterCoin === c.coin ? "bg-hl-accent/10" : ""
-                        }`}
-                      >
-                        <td className="px-4 py-3 text-sm font-medium text-hl-text-primary">{c.coin}</td>
-                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
-                          {c.trades.toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
-                          {formatUsd(c.volume)}
-                        </td>
-                        <td className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(c.pnl)}`}>
-                          {formatUsd(c.pnl)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
-                          {formatUsd(c.fees)}
-                        </td>
-                      </tr>
-                    ))}
+                    {coinSummariesWithOther.map((c) => {
+                      const isOther = c.coin.startsWith("Other");
+                      return (
+                        <tr
+                          key={c.coin}
+                          onClick={() => !isOther && setFilterCoin(filterCoin === c.coin ? "all" : c.coin)}
+                          className={`border-b border-hl-border/50 transition-colors ${
+                            isOther ? "opacity-60 italic" : "hover:bg-hl-bg-hover/50 cursor-pointer"
+                          } ${filterCoin === c.coin ? "bg-hl-accent/10" : ""}`}
+                        >
+                          <td className={`px-4 py-3 text-sm font-medium ${isOther ? "text-hl-text-tertiary" : "text-hl-text-primary"}`}>
+                            {c.coin}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
+                            {isOther ? "-" : c.trades.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
+                            {formatUsd(c.volume)}
+                          </td>
+                          <td className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(c.pnl)}`}>
+                            {formatUsd(c.pnl)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
+                            {isOther ? "-" : formatUsd(c.fees)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
