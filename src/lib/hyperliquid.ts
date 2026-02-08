@@ -191,10 +191,12 @@ export async function getPortfolioHistory(
   return result as Record<PortfolioTimeRange, PortfolioPeriodData>;
 }
 
+// Hyperliquid launch: ~late 2022. Use Jan 1 2023 as safe all-time start.
+const ALL_TIME_START = 1672531200000;
+
 export async function getAddressStats(address: string): Promise<AddressStats> {
-  // Fetch all-time fills (from epoch) for comprehensive fee/trade data
   const [fills, clearinghouse] = await Promise.all([
-    getAllUserFills(address, 0, undefined, 30),
+    getAllUserFills(address, ALL_TIME_START, undefined, 30),
     getClearinghouseState(address),
   ]);
 

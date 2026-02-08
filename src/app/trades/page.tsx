@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAddresses } from "@/lib/store";
-import { getAllUserFills, Fill } from "@/lib/hyperliquid";
+import { getUserFills, Fill } from "@/lib/hyperliquid";
 import { formatUsd, formatDate, pnlColor, formatAddress } from "@/lib/format";
 
 type SortKey = "coin" | "trades" | "volume" | "pnl" | "fees";
@@ -39,10 +39,10 @@ export default function TradesPage() {
     }
     if (!hasLoadedOnce.current) setLoading(true);
     try {
-      // Fetch all-time fills (from epoch) for accurate volume/PnL totals
+      // Fetch recent fills (latest 2000 per address, fast single API call)
       const results = await Promise.allSettled(
         addresses.map(async (a) => {
-          const f = await getAllUserFills(a.address, 0, undefined, 30);
+          const f = await getUserFills(a.address);
           return f.map((fill) => ({ ...fill, wallet: a.address }));
         })
       );
@@ -53,7 +53,10 @@ export default function TradesPage() {
         )
         .flatMap((r) => r.value)
         .sort((a, b) => b.time - a.time);
-      setFills(allFills);
+      // On refresh, only update if we got data (prevent flicker to empty)
+      if (allFills.length > 0 || !hasLoadedOnce.current) {
+        setFills(allFills);
+      }
       hasLoadedOnce.current = true;
     } catch (err) {
       console.error("Failed to fetch fills:", err);

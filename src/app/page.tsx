@@ -207,8 +207,11 @@ export default function Dashboard() {
       setPortfolioLoading(false);
       return;
     }
+
+    const isFirstLoad = !hasLoadedOnce.current;
+
     // Only show loading skeleton on the very first fetch
-    if (!hasLoadedOnce.current) {
+    if (isFirstLoad) {
       setLoading(true);
       setPortfolioLoading(true);
     }
@@ -239,22 +242,24 @@ export default function Dashboard() {
       setPortfolioData(newPortfolio);
       setPortfolioLoading(false);
 
-      // Show positions/account value immediately
-      const lightStats = lightStatsResults
-        .filter(
-          (r): r is PromiseFulfilledResult<AddressStats> =>
-            r.status === "fulfilled"
-        )
-        .map((r) => r.value);
-      setStats(lightStats);
-      setLoading(false);
+      // Only use light stats on first load; on refresh keep existing full data
+      if (isFirstLoad) {
+        const lightStats = lightStatsResults
+          .filter(
+            (r): r is PromiseFulfilledResult<AddressStats> =>
+              r.status === "fulfilled"
+          )
+          .map((r) => r.value);
+        setStats(lightStats);
+        setLoading(false);
+      }
     } catch (err) {
       console.error("Failed to fetch portfolio:", err);
       setPortfolioLoading(false);
       setLoading(false);
     }
 
-    // Phase 2: full 30D stats with fills (background, slower)
+    // Phase 2: full all-time stats with fills (background, slower)
     try {
       const fullStatsResults = await Promise.allSettled(
         addresses.map((a) => getAddressStats(a.address))
@@ -265,7 +270,9 @@ export default function Dashboard() {
             r.status === "fulfilled"
         )
         .map((r) => r.value);
-      setStats(fullStats);
+      if (fullStats.length > 0) {
+        setStats(fullStats);
+      }
     } catch (err) {
       console.error("Failed to fetch full stats:", err);
     }
