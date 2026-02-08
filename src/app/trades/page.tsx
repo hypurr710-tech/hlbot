@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAddresses } from "@/lib/store";
-import { getUserFills, Fill } from "@/lib/hyperliquid";
+import { getAllUserFills, Fill } from "@/lib/hyperliquid";
 import { formatUsd, formatDate, pnlColor, formatAddress } from "@/lib/format";
 
 type SortKey = "coin" | "trades" | "volume" | "pnl" | "fees";
@@ -39,10 +39,10 @@ export default function TradesPage() {
     }
     if (!hasLoadedOnce.current) setLoading(true);
     try {
-      // Fetch recent fills only (no startTime = latest 2000 per address, single API call each)
+      // Fetch all-time fills (from epoch) for accurate volume/PnL totals
       const results = await Promise.allSettled(
         addresses.map(async (a) => {
-          const f = await getUserFills(a.address);
+          const f = await getAllUserFills(a.address, 0, undefined, 30);
           return f.map((fill) => ({ ...fill, wallet: a.address }));
         })
       );
@@ -122,12 +122,12 @@ export default function TradesPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-hl-text-primary">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-xl md:text-2xl font-semibold text-hl-text-primary">
             Trade History
           </h1>
-          <p className="text-sm text-hl-text-secondary mt-1">
+          <p className="text-xs md:text-sm text-hl-text-secondary mt-1">
             {filtered.length.toLocaleString()} trades &middot;{" "}
             {formatUsd(totalVolume)} volume &middot; {formatUsd(totalFees)} fees &middot;{" "}
             <span className={pnlColor(totalPnl)}>{formatUsd(totalPnl)} PnL</span>
@@ -143,7 +143,7 @@ export default function TradesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3">
+      <div className="flex gap-2 md:gap-3 flex-wrap">
         <select
           value={filterAddress}
           onChange={(e) => {
@@ -203,7 +203,7 @@ export default function TradesPage() {
           {showSummary && (
             <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden mb-6">
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[500px]">
                   <thead>
                     <tr className="border-b border-hl-border">
                       {([
@@ -279,7 +279,7 @@ export default function TradesPage() {
       {/* Trade Table */}
       <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[800px]">
             <thead>
               <tr className="border-b border-hl-border">
                 {[

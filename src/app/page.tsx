@@ -30,7 +30,7 @@ function latestFromHistory(history: [number, string][] | undefined): number {
 
 import { TrackedAddress, saveAddresses } from "@/lib/store";
 
-type AddrSortKey = "label" | "portfolio" | "volume" | "pnl" | "trades" | "fees";
+type AddrSortKey = "label" | "portfolio" | "volume" | "pnl" | "fees";
 
 function PerAddressTable({
   stats,
@@ -60,7 +60,7 @@ function PerAddressTable({
       const volume = safeNum(parseFloat(portfolioData[s.address]?.allTime?.vlm || "0"));
       const pnl = latestFromHistory(portfolioData[s.address]?.allTime?.pnlHistory);
       const fees = safeNum(s.totalFees) + safeNum(s.totalBuilderFees);
-      return { address: s.address, label: addrLabel, portfolio, volume, pnl, trades: s.totalTrades, fees };
+      return { address: s.address, label: addrLabel, portfolio, volume, pnl, fees };
     });
   }, [stats, addresses, portfolioData]);
 
@@ -106,8 +106,7 @@ function PerAddressTable({
     { key: "portfolio", label: "Portfolio Value", align: "right" },
     { key: "volume", label: "All-Time Volume", align: "right" },
     { key: "pnl", label: "All-Time PnL", align: "right" },
-    { key: "trades", label: "30D Trades", align: "right" },
-    { key: "fees", label: "30D Fees", align: "right" },
+    { key: "fees", label: "All-Time Fees", align: "right" },
   ];
 
   return (
@@ -116,7 +115,8 @@ function PerAddressTable({
         Per-Address Breakdown
       </h2>
       <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
-        <table className="w-full">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[600px]">
           <thead>
             <tr className="border-b border-hl-border">
               {cols.map((col) => (
@@ -134,7 +134,7 @@ function PerAddressTable({
             {loading
               ? Array.from({ length: 3 }).map((_, i) => (
                   <tr key={i} className="border-b border-hl-border/50">
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 5 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="skeleton h-4 w-20" />
                       </td>
@@ -177,9 +177,6 @@ function PerAddressTable({
                     <td className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(r.pnl)}`}>
                       {formatUsd(r.pnl)}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
-                      {r.trades.toLocaleString()}
-                    </td>
                     <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
                       {formatUsd(r.fees)}
                     </td>
@@ -187,6 +184,7 @@ function PerAddressTable({
                 ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -285,7 +283,7 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [fetchStats]);
 
-  // 30-day stats from fills
+  // All-time stats from fills
   const totals = stats.reduce(
     (acc, s) => ({
       volume: acc.volume + safeNum(s.totalVolume),
@@ -295,7 +293,6 @@ export default function Dashboard() {
       unrealizedPnl: acc.unrealizedPnl + safeNum(s.unrealizedPnl),
       accountValue: acc.accountValue + safeNum(s.accountValue),
       trades: acc.trades + safeNum(s.totalTrades),
-      fundingPnl: acc.fundingPnl + safeNum(s.fundingPnl),
     }),
     {
       volume: 0,
@@ -305,7 +302,6 @@ export default function Dashboard() {
       unrealizedPnl: 0,
       accountValue: 0,
       trades: 0,
-      fundingPnl: 0,
     }
   );
 
@@ -354,28 +350,28 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0">
           <img
             src={`${basePath}/purr-avatar.png`}
             alt="Purr"
             width={40}
             height={40}
-            className="rounded-full object-cover"
+            className="rounded-full object-cover flex-shrink-0 hidden sm:block"
           />
-          <div>
-            <h1 className="text-2xl font-semibold text-hl-text-primary">
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-semibold text-hl-text-primary">
               Dashboard
             </h1>
-            <p className="text-sm text-hl-text-secondary mt-1">
+            <p className="text-xs md:text-sm text-hl-text-secondary mt-1">
               {addresses.length} address{addresses.length !== 1 ? "es" : ""}{" "}
               tracked
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
           {lastUpdated && (
-            <span className="text-xs text-hl-text-tertiary">
+            <span className="text-xs text-hl-text-tertiary hidden sm:inline">
               Updated{" "}
               {lastUpdated.toLocaleTimeString("en-US", {
                 hour: "2-digit",
@@ -387,7 +383,7 @@ export default function Dashboard() {
           <button
             onClick={fetchStats}
             disabled={loading}
-            className="px-4 py-2 bg-hl-bg-tertiary border border-hl-border rounded-lg text-xs font-medium text-hl-text-secondary hover:text-hl-text-primary hover:border-hl-border-light transition-colors disabled:opacity-50"
+            className="px-3 md:px-4 py-2 bg-hl-bg-tertiary border border-hl-border rounded-lg text-xs font-medium text-hl-text-secondary hover:text-hl-text-primary hover:border-hl-border-light transition-colors disabled:opacity-50"
           >
             {loading ? "Loading..." : "Refresh"}
           </button>
@@ -395,7 +391,7 @@ export default function Dashboard() {
       </div>
 
       {/* Top Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatCard
           title="Portfolio Value"
           value={formatUsd(portfolioValue)}
@@ -411,11 +407,11 @@ export default function Dashboard() {
         <StatCard
           title="All-Time Volume"
           value={formatUsd(allTimeVolume)}
-          subtitle={`30D: ${formatUsd(totals.volume)} (${totals.trades.toLocaleString()} trades)`}
+          subtitle={`${totals.trades.toLocaleString()} trades`}
           loading={portfolioLoading}
         />
         <StatCard
-          title="30D Fees"
+          title="All-Time Fees"
           value={formatUsd(totals.fees + totals.builderFees)}
           subtitle={`Trading ${formatUsd(totals.fees)} + Builder ${formatUsd(totals.builderFees)}`}
           loading={loading}
@@ -443,7 +439,8 @@ export default function Dashboard() {
             Active Positions
           </h2>
           <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
-            <table className="w-full">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px]">
               <thead>
                 <tr className="border-b border-hl-border">
                   <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-left">
@@ -524,6 +521,7 @@ export default function Dashboard() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}

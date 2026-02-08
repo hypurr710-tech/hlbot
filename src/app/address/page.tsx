@@ -63,16 +63,16 @@ export default function AddressPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-semibold text-hl-text-primary">
+        <h1 className="text-xl md:text-2xl font-semibold text-hl-text-primary">
           Manage Addresses
         </h1>
-        <p className="text-sm text-hl-text-secondary mt-1">
+        <p className="text-xs md:text-sm text-hl-text-secondary mt-1">
           Hyperliquid 지갑 주소를 추가하고 관리하세요. 각 주소의 볼륨, PnL, 수수료를 추적합니다.
         </p>
       </div>
 
       {/* Add Address Form */}
-      <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-5 glow-hover">
+      <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-4 md:p-5 glow-hover">
         <h2 className="text-sm font-medium text-hl-text-primary mb-1">
           Add New Address
         </h2>
@@ -178,7 +178,7 @@ export default function AddressPage() {
                       </div>
 
                       {/* External links */}
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 md:gap-3 flex-wrap">
                         <a
                           href={`https://hypurrscan.io/address/${addr.address}`}
                           target="_blank"

@@ -18,21 +18,21 @@ export default function StatCard({
   loading,
 }: StatCardProps) {
   return (
-    <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-5 glow-hover">
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-[11px] font-medium text-hl-text-tertiary uppercase tracking-wider">
+    <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-3 md:p-5 glow-hover">
+      <div className="flex items-start justify-between mb-2 md:mb-3">
+        <span className="text-[10px] md:text-[11px] font-medium text-hl-text-tertiary uppercase tracking-wider">
           {title}
         </span>
         {icon && <span className="text-hl-text-tertiary">{icon}</span>}
       </div>
       {loading ? (
         <div className="space-y-2">
-          <div className="skeleton h-7 w-32" />
-          <div className="skeleton h-4 w-20" />
+          <div className="skeleton h-6 md:h-7 w-24 md:w-32" />
+          <div className="skeleton h-3 md:h-4 w-16 md:w-20" />
         </div>
       ) : (
         <>
-          <div className="text-2xl font-semibold text-hl-text-primary font-mono tracking-tight">
+          <div className="text-lg md:text-2xl font-semibold text-hl-text-primary font-mono tracking-tight">
             {value}
           </div>
           <div className="flex items-center gap-2 mt-1">
@@ -47,7 +47,7 @@ export default function StatCard({
               </span>
             )}
             {subtitle && (
-              <span className="text-xs text-hl-text-tertiary">{subtitle}</span>
+              <span className="text-[10px] md:text-xs text-hl-text-tertiary">{subtitle}</span>
             )}
           </div>
         </>
