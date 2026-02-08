@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const basePath = process.env.NODE_ENV === "production" ? "/hlbot" : "";
-
 const navItems = [
   {
     href: "/",
@@ -92,7 +90,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         <div className="flex items-center justify-between px-4 h-16 border-b border-hl-border">
           <div className="flex items-center gap-3">
             <img
-              src={`${basePath}/purr-avatar.png`}
+              src="/purr-avatar.png"
               alt="Hypurr"
               width={32}
               height={32}
@@ -151,7 +149,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         <div className="px-4 py-3 border-t border-hl-border">
           <div className="flex items-center gap-3">
             <img
-              src={`${basePath}/purr-avatar.png`}
+              src="/purr-avatar.png"
               alt="Purr"
               width={36}
               height={36}

@@ -14,8 +14,6 @@ import StatCard from "@/components/StatCard";
 import PortfolioChart from "@/components/PortfolioChart";
 import Link from "next/link";
 
-const basePath = process.env.NODE_ENV === "production" ? "/hlbot" : "";
-
 /** Safely parse a number, returning 0 for NaN/undefined */
 function safeNum(val: number | undefined | null): number {
   if (val === undefined || val === null || isNaN(val)) return 0;
@@ -325,7 +323,7 @@ export default function Dashboard() {
         <div className="relative mb-6">
           <div className="absolute inset-0 bg-gradient-to-t from-hl-bg-primary via-transparent to-transparent z-10 rounded-2xl" />
           <img
-            src={`${basePath}/purr-main.jpg`}
+            src="/purr-main.jpg"
             alt="Purr - Hyperliquid Mascot"
             className="rounded-2xl opacity-80 max-w-[360px] w-full"
           />
@@ -353,7 +351,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
           <img
-            src={`${basePath}/purr-avatar.png`}
+            src="/purr-avatar.png"
             alt="Purr"
             width={40}
             height={40}
