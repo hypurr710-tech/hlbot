@@ -194,6 +194,11 @@ export async function getPortfolioHistory(
 // Hyperliquid launch: ~late 2022. Use Jan 1 2023 as safe all-time start.
 const ALL_TIME_START = 1672531200000;
 
+/** Fetch current mid prices for all assets */
+export async function getAllMids(): Promise<Record<string, string>> {
+  return (await postInfo({ type: "allMids" })) as Record<string, string>;
+}
+
 export async function getAddressStats(address: string): Promise<AddressStats> {
   const [fills, clearinghouse] = await Promise.all([
     getAllUserFills(address, ALL_TIME_START, undefined, 30),
