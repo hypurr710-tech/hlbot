@@ -40,7 +40,7 @@ export default function TradesPage() {
   const [positionError, setPositionError] = useState<string | null>(null);
   const [filterCoin, setFilterCoin] = useState<string>("all");
   const [filterAddress, setFilterAddress] = useState<string>("all");
-  const [countdown, setCountdown] = useState(60);
+  const [countdown, setCountdown] = useState(90);
 
   // Phase 1: Fast data - portfolio stats + positions + prices (runs every 60s)
   const fetchFastData = useCallback(async () => {
@@ -55,26 +55,25 @@ export default function TradesPage() {
     }
 
     try {
-      const [portfolioResults, positionResults, mids] = await Promise.all([
-        Promise.allSettled(
-          addresses.map((a) => getPortfolioHistory(a.address))
-        ),
-        Promise.allSettled(
-          addresses.map(async (a) => {
-            try {
-              const positions = await getAllPositions(a.address);
-              console.log(`[hlbot] positions for ${a.address.slice(0, 10)}:`, positions.length, positions.map(p => p.coin));
-              return positions.map((p) => ({ ...p, wallet: a.address } as WalletPosition));
-            } catch (posErr) {
-              console.error(`[hlbot] Failed to fetch positions for ${a.address.slice(0,10)}:`, posErr);
-              throw posErr;
-            }
-          })
-        ),
-        getAllMids().catch(() => ({} as Record<string, string>)),
-      ]);
-
+      // Fetch mid prices first (lightweight, weight 2)
+      const mids = await getAllMids().catch(() => ({} as Record<string, string>));
       setMidPrices(mids);
+
+      // Process each address sequentially to spread requests and avoid rate limit bursts
+      const portfolioResults: PromiseSettledResult<Record<string, PortfolioPeriodData>>[] = [];
+      const positionResults: PromiseSettledResult<WalletPosition[]>[] = [];
+
+      for (const a of addresses) {
+        const [portfolioResult, positionResult] = await Promise.allSettled([
+          getPortfolioHistory(a.address),
+          (async () => {
+            const positions = await getAllPositions(a.address);
+            return positions.map((p) => ({ ...p, wallet: a.address } as WalletPosition));
+          })(),
+        ]);
+        portfolioResults.push(portfolioResult);
+        positionResults.push(positionResult);
+      }
 
       // Portfolio volume & PnL
       let totalVlm = 0;
@@ -107,7 +106,7 @@ export default function TradesPage() {
       setPositions(allPositions);
       setPositionError(errors.length > 0 ? errors.join("; ") : null);
       setLoading(false);
-      setCountdown(60);
+      setCountdown(90);
     } catch (err) {
       console.error("Failed to fetch fast data:", err);
       setPositionError(String(err));
@@ -122,16 +121,16 @@ export default function TradesPage() {
     fetchFastData();
   }, [fetchFastData]);
 
-  // Auto-refresh: only fast data every 60s
+  // Auto-refresh: every 90s to stay within rate limits
   useEffect(() => {
-    const interval = setInterval(fetchFastData, 60_000);
+    const interval = setInterval(fetchFastData, 90_000);
     return () => clearInterval(interval);
   }, [fetchFastData]);
 
   // Countdown timer
   useEffect(() => {
     const timer = setInterval(() => {
-      setCountdown((prev) => (prev <= 1 ? 60 : prev - 1));
+      setCountdown((prev) => (prev <= 1 ? 90 : prev - 1));
     }, 1000);
     return () => clearInterval(timer);
   }, []);

@@ -1,5 +1,52 @@
 const API_URL = "https://api.hyperliquid.xyz/info";
 
+// ---------------------------------------------------------------------------
+// Weight-based rate limiter (Hyperliquid allows 1200 weight per minute)
+// ---------------------------------------------------------------------------
+const WEIGHT_LIMIT = 1100; // leave 100 buffer below the 1200 hard cap
+const WEIGHT_WINDOW_MS = 60_000;
+
+const LIGHT_WEIGHT_TYPES = new Set([
+  "clearinghouseState",
+  "allMids",
+  "l2Book",
+  "orderStatus",
+  "spotClearinghouseState",
+  "exchangeStatus",
+]);
+
+function getWeight(type: unknown): number {
+  return LIGHT_WEIGHT_TYPES.has(type as string) ? 2 : 20;
+}
+
+const weightLog: { weight: number; ts: number }[] = [];
+
+function consumedWeight(): number {
+  const cutoff = Date.now() - WEIGHT_WINDOW_MS;
+  while (weightLog.length > 0 && weightLog[0].ts < cutoff) weightLog.shift();
+  return weightLog.reduce((s, e) => s + e.weight, 0);
+}
+
+async function waitForBudget(weight: number): Promise<void> {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const used = consumedWeight();
+    if (used + weight <= WEIGHT_LIMIT) {
+      weightLog.push({ weight, ts: Date.now() });
+      return;
+    }
+    // wait until the oldest entry expires
+    const oldest = weightLog.length > 0 ? weightLog[0].ts : Date.now();
+    const waitMs = Math.max(200, oldest + WEIGHT_WINDOW_MS - Date.now() + 50);
+    console.warn(
+      `[hlbot] rate-limiter: used ${used}/${WEIGHT_LIMIT} weight, waiting ${waitMs}ms`
+    );
+    await new Promise((r) => setTimeout(r, Math.min(waitMs, 5000)));
+  }
+}
+
+// ---------------------------------------------------------------------------
+
 export interface Fill {
   coin: string;
   px: string;
@@ -72,6 +119,9 @@ export interface AddressStats {
 }
 
 async function postInfo(body: Record<string, unknown>, timeoutMs = 15000): Promise<unknown> {
+  // Acquire rate-limit budget before sending the request
+  await waitForBudget(getWeight(body.type));
+
   const maxRetries = 3;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController();
@@ -86,9 +136,10 @@ async function postInfo(body: Record<string, unknown>, timeoutMs = 15000): Promi
       if (res.status === 429) {
         clearTimeout(timer);
         if (attempt < maxRetries) {
-          const delay = Math.pow(2, attempt + 1) * 500; // 1s, 2s, 4s
+          const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
           console.warn(`[hlbot] 429 rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`, body.type);
           await new Promise((r) => setTimeout(r, delay));
+          await waitForBudget(getWeight(body.type)); // re-acquire budget
           continue;
         }
         throw new Error(`API rate limited (429) after ${maxRetries} retries`);
@@ -143,7 +194,7 @@ export async function getAllUserFills(
   let currentStart = startTime;
 
   for (let page = 0; page < maxPages; page++) {
-    if (page > 0) await sleep(300); // Rate limit protection between pages
+    if (page > 0) await sleep(500); // Rate limit protection between pages
     const fills = await getUserFills(user, currentStart, endTime);
     if (fills.length === 0) break;
 
@@ -280,7 +331,7 @@ export async function getAllMids(): Promise<Record<string, string>> {
 
 export async function getAddressStats(address: string): Promise<AddressStats> {
   const [fills, clearinghouse] = await Promise.all([
-    getAllUserFills(address, ALL_TIME_START, undefined, 30),
+    getAllUserFills(address, ALL_TIME_START, undefined, 10),
     getClearinghouseState(address),
   ]);
 

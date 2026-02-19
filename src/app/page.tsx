@@ -217,18 +217,19 @@ export default function Dashboard() {
     }
 
     // Phase 1: portfolio + lightweight stats (fast, no fill pagination)
+    // Process each address sequentially to spread requests and avoid bursts
     try {
-      const [portfolioResults, lightStatsResults] = await Promise.all([
-        Promise.allSettled(
-          addresses.map(async (a) => ({
-            address: a.address,
-            data: await getPortfolioHistory(a.address),
-          }))
-        ),
-        Promise.allSettled(
-          addresses.map((a) => getAddressStatsLight(a.address))
-        ),
-      ]);
+      const portfolioResults: PromiseSettledResult<{ address: string; data: Record<string, PortfolioPeriodData> }>[] = [];
+      const lightStatsResults: PromiseSettledResult<AddressStats>[] = [];
+
+      for (const a of addresses) {
+        const [portfolioResult, lightResult] = await Promise.allSettled([
+          (async () => ({ address: a.address, data: await getPortfolioHistory(a.address) }))(),
+          getAddressStatsLight(a.address),
+        ]);
+        portfolioResults.push(portfolioResult);
+        lightStatsResults.push(lightResult);
+      }
 
       const newPortfolio: Record<
         string,
@@ -259,22 +260,25 @@ export default function Dashboard() {
       setLoading(false);
     }
 
-    // Phase 2: full all-time stats with fills (background, slower)
-    try {
-      const fullStatsResults = await Promise.allSettled(
-        addresses.map((a) => getAddressStats(a.address))
-      );
-      const fullStats = fullStatsResults
-        .filter(
-          (r): r is PromiseFulfilledResult<AddressStats> =>
-            r.status === "fulfilled"
-        )
-        .map((r) => r.value);
-      if (fullStats.length > 0) {
-        setStats(fullStats);
+    // Phase 2: full all-time stats with fills (only on first load — too heavy for polling)
+    if (isFirstLoad) {
+      try {
+        // Process addresses sequentially to avoid burst requests
+        const fullStats: AddressStats[] = [];
+        for (const a of addresses) {
+          try {
+            const stat = await getAddressStats(a.address);
+            fullStats.push(stat);
+          } catch (err) {
+            console.error(`Failed to fetch full stats for ${a.address.slice(0, 10)}:`, err);
+          }
+        }
+        if (fullStats.length > 0) {
+          setStats(fullStats);
+        }
+      } catch (err) {
+        console.error("Failed to fetch full stats:", err);
       }
-    } catch (err) {
-      console.error("Failed to fetch full stats:", err);
     }
 
     hasLoadedOnce.current = true;
@@ -284,7 +288,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, 60_000);
+    const interval = setInterval(fetchStats, 120_000); // 2min interval to stay within rate limits
     return () => clearInterval(interval);
   }, [fetchStats]);
 
