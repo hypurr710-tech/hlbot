@@ -223,11 +223,15 @@ export default function Dashboard() {
       const lightStatsResults: PromiseSettledResult<AddressStats>[] = [];
 
       for (const a of addresses) {
-        const [portfolioResult, lightResult] = await Promise.allSettled([
+        // Fully sequential: portfolio first, then light stats
+        const [portfolioResult] = await Promise.allSettled([
           (async () => ({ address: a.address, data: await getPortfolioHistory(a.address) }))(),
-          getAddressStatsLight(a.address),
         ]);
         portfolioResults.push(portfolioResult);
+
+        const [lightResult] = await Promise.allSettled([
+          getAddressStatsLight(a.address),
+        ]);
         lightStatsResults.push(lightResult);
       }
 

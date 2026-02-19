@@ -59,19 +59,24 @@ export default function TradesPage() {
       const mids = await getAllMids().catch(() => ({} as Record<string, string>));
       setMidPrices(mids);
 
-      // Process each address sequentially to spread requests and avoid rate limit bursts
+      // Process each address fully sequentially (portfolio → positions) to avoid bursts
       const portfolioResults: PromiseSettledResult<Record<string, PortfolioPeriodData>>[] = [];
       const positionResults: PromiseSettledResult<WalletPosition[]>[] = [];
 
       for (const a of addresses) {
-        const [portfolioResult, positionResult] = await Promise.allSettled([
+        // Portfolio first
+        const [portfolioResult] = await Promise.allSettled([
           getPortfolioHistory(a.address),
+        ]);
+        portfolioResults.push(portfolioResult);
+
+        // Then positions (this internally calls getUserFills + clearinghouseState)
+        const [positionResult] = await Promise.allSettled([
           (async () => {
             const positions = await getAllPositions(a.address);
             return positions.map((p) => ({ ...p, wallet: a.address } as WalletPosition));
           })(),
         ]);
-        portfolioResults.push(portfolioResult);
         positionResults.push(positionResult);
       }
 
