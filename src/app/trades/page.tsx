@@ -263,7 +263,7 @@ export default function TradesPage() {
               const posValue = Math.abs(parseFloat(p.positionValue));
               const entryPx = p.entryPx ? parseFloat(p.entryPx) : 0;
               const currentPx = midPrices[p.coin] ? parseFloat(midPrices[p.coin]) : 0;
-              const funding = safeNum(parseFloat(p.cumFunding.sinceOpen));
+              const funding = safeNum(-parseFloat(p.cumFunding.sinceOpen));
               const liqPx = p.liquidationPx ? parseFloat(p.liquidationPx) : 0;
               const levType = p.leverage.type === "isolated" ? "iso" : "cross";
               const addrLabel = addresses.find(
@@ -404,7 +404,7 @@ export default function TradesPage() {
                     const posValue = Math.abs(parseFloat(p.positionValue));
                     const entryPx = p.entryPx ? parseFloat(p.entryPx) : 0;
                     const currentPx = midPrices[p.coin] ? parseFloat(midPrices[p.coin]) : 0;
-                    const funding = safeNum(parseFloat(p.cumFunding.sinceOpen));
+                    const funding = safeNum(-parseFloat(p.cumFunding.sinceOpen));
                     const liqPx = p.liquidationPx ? parseFloat(p.liquidationPx) : 0;
                     const levType = p.leverage.type === "isolated" ? "iso" : "cross";
                     const addrLabel = addresses.find(
