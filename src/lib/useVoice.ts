@@ -2,86 +2,130 @@
 
 import { useState, useRef, useCallback } from "react";
 
-export function useVoice() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [audioLevel, setAudioLevel] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animFrameRef = useRef<number>(0);
-  const streamRef = useRef<MediaStream | null>(null);
+interface SpeechRecognitionEvent {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
 
-  const startRecording = useCallback(async (): Promise<void> => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
+interface SpeechRecognitionErrorEvent {
+  error: string;
+}
 
-      // Set up audio analyser for volume visualization
-      const audioCtx = new AudioContext();
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      analyserRef.current = analyser;
+interface SpeechRecognitionInstance extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  start: () => void;
+  stop: () => void;
+}
 
-      // Start volume monitoring
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const updateLevel = () => {
-        analyser.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
-        setAudioLevel(avg / 255);
-        animFrameRef.current = requestAnimationFrame(updateLevel);
-      };
-      updateLevel();
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognitionInstance;
+    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
+  }
+}
 
-      // Set up MediaRecorder
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-          ? "audio/webm;codecs=opus"
-          : "audio/webm",
-      });
-      chunksRef.current = [];
+export function useVoice(onResult: (text: string) => void) {
+  const [isListening, setIsListening] = useState(false);
+  const [interimText, setInterimText] = useState("");
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const finalTranscriptRef = useRef("");
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start(100); // collect data every 100ms
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Failed to start recording:", err);
-      throw err;
+  const startListening = useCallback(() => {
+    const SR =
+      typeof window !== "undefined"
+        ? window.SpeechRecognition || window.webkitSpeechRecognition
+        : null;
+    if (!SR) {
+      alert("Your browser doesn't support speech recognition. Please use Chrome or Edge.");
+      return;
     }
-  }, []);
 
-  const stopRecording = useCallback(async (): Promise<Blob | null> => {
-    return new Promise((resolve) => {
-      const mediaRecorder = mediaRecorderRef.current;
-      if (!mediaRecorder || mediaRecorder.state === "inactive") {
-        resolve(null);
-        return;
+    const recognition = new SR();
+    recognition.lang = "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    finalTranscriptRef.current = "";
+
+    recognition.onresult = (e: SpeechRecognitionEvent) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const transcript = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          finalTranscriptRef.current += transcript;
+        } else {
+          interim += transcript;
+        }
       }
+      setInterimText(finalTranscriptRef.current + interim);
+    };
 
-      // Stop volume monitoring
-      cancelAnimationFrame(animFrameRef.current);
-      setAudioLevel(0);
+    recognition.onend = () => {
+      setIsListening(false);
+      const text = finalTranscriptRef.current.trim();
+      setInterimText("");
+      if (text) {
+        onResult(text);
+      }
+    };
 
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        chunksRef.current = [];
-        setIsRecording(false);
+    recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
+      console.error("Speech recognition error:", e.error);
+      setIsListening(false);
+      setInterimText("");
+    };
 
-        // Stop all tracks
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+    setInterimText("");
+  }, [onResult]);
 
-        resolve(blob);
-      };
-
-      mediaRecorder.stop();
-    });
+  const stopListening = useCallback(() => {
+    recognitionRef.current?.stop();
   }, []);
 
-  return { isRecording, audioLevel, startRecording, stopRecording };
+  return { isListening, interimText, startListening, stopListening };
+}
+
+/** Speak text using browser SpeechSynthesis */
+export function speak(
+  text: string,
+  onStart?: () => void,
+  onEnd?: () => void
+) {
+  if (typeof window === "undefined") return;
+
+  // Cancel any ongoing speech
+  speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "en-US";
+  utterance.rate = 0.92;
+  utterance.pitch = 1.05;
+
+  // Try to pick a nice voice
+  const voices = speechSynthesis.getVoices();
+  const preferred =
+    voices.find((v) => v.name.includes("Samantha")) ||
+    voices.find((v) => v.name.includes("Google US English")) ||
+    voices.find((v) => v.lang === "en-US" && !v.localService) ||
+    voices.find((v) => v.lang === "en-US");
+  if (preferred) utterance.voice = preferred;
+
+  if (onStart) utterance.onstart = onStart;
+  if (onEnd) utterance.onend = onEnd;
+  utterance.onerror = () => onEnd?.();
+
+  speechSynthesis.speak(utterance);
+}
+
+/** Stop any ongoing speech */
+export function stopSpeaking() {
+  if (typeof window === "undefined") return;
+  speechSynthesis.cancel();
 }

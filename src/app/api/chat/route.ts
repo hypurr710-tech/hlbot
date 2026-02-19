@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import OpenAI from "openai";
 
 const SYSTEM_PROMPT = `You are Aria, a warm and encouraging English speaking partner. Your personality is inspired by a caring, witty friend who genuinely enjoys conversation.
 
@@ -31,23 +30,66 @@ export async function POST(req: NextRequest) {
 
   const { messages } = await req.json();
 
-  const openai = new OpenAI({ apiKey });
+  // Convert to Gemini format
+  const contents = messages.map((m: { role: string; content: string }) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
 
-  const stream = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
-    stream: true,
-    max_tokens: 300,
-    temperature: 0.8,
-  });
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=${apiKey}&alt=sse`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents,
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 300,
+        },
+      }),
+    }
+  );
 
+  if (!response.ok) {
+    const err = await response.text();
+    return new Response(JSON.stringify({ error: err }), {
+      status: response.status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const reader = response.body?.getReader();
   const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
   const readable = new ReadableStream({
     async start(controller) {
-      for await (const chunk of stream) {
-        const text = chunk.choices[0]?.delta?.content;
-        if (text) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
+      if (!reader) {
+        controller.close();
+        return;
+      }
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              const text =
+                data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) {
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ text })}\n\n`)
+                );
+              }
+            } catch {
+              // skip malformed chunk
+            }
+          }
         }
       }
       controller.enqueue(encoder.encode("data: [DONE]\n\n"));
