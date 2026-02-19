@@ -2,9 +2,12 @@ const API_URL = "https://api.hyperliquid.xyz/info";
 
 // ---------------------------------------------------------------------------
 // Weight-based rate limiter (Hyperliquid allows 1200 weight per minute)
+// Persists state in localStorage so page reloads don't lose track.
 // ---------------------------------------------------------------------------
-const WEIGHT_LIMIT = 1100; // leave 100 buffer below the 1200 hard cap
+const WEIGHT_LIMIT = 800; // conservative budget (hard cap is 1200)
 const WEIGHT_WINDOW_MS = 60_000;
+const MIN_REQUEST_GAP_MS = 200; // minimum gap between any two requests
+const LS_KEY = "hlbot_rate_weight_log";
 
 const LIGHT_WEIGHT_TYPES = new Set([
   "clearinghouseState",
@@ -19,12 +22,44 @@ function getWeight(type: unknown): number {
   return LIGHT_WEIGHT_TYPES.has(type as string) ? 2 : 20;
 }
 
-const weightLog: { weight: number; ts: number }[] = [];
+// --- Persistent weight log (survives page reloads) ---
+interface WeightEntry { weight: number; ts: number }
+let weightLog: WeightEntry[] = [];
+let lastRequestTs = 0;
+
+function loadWeightLog(): void {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(LS_KEY) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw) as WeightEntry[];
+      const cutoff = Date.now() - WEIGHT_WINDOW_MS;
+      weightLog = parsed.filter((e) => e.ts >= cutoff);
+    }
+  } catch { /* ignore */ }
+}
+
+function saveWeightLog(): void {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(LS_KEY, JSON.stringify(weightLog));
+    }
+  } catch { /* ignore */ }
+}
+
+// Load once on module init
+loadWeightLog();
 
 function consumedWeight(): number {
   const cutoff = Date.now() - WEIGHT_WINDOW_MS;
-  while (weightLog.length > 0 && weightLog[0].ts < cutoff) weightLog.shift();
+  weightLog = weightLog.filter((e) => e.ts >= cutoff);
   return weightLog.reduce((s, e) => s + e.weight, 0);
+}
+
+/** Call when we receive a 429 — marks the budget as fully exhausted. */
+function onRateLimited(): void {
+  const now = Date.now();
+  weightLog = [{ weight: WEIGHT_LIMIT, ts: now }];
+  saveWeightLog();
 }
 
 async function waitForBudget(weight: number): Promise<void> {
@@ -32,16 +67,24 @@ async function waitForBudget(weight: number): Promise<void> {
   while (true) {
     const used = consumedWeight();
     if (used + weight <= WEIGHT_LIMIT) {
+      // Enforce minimum gap between requests to prevent bursts
+      const now = Date.now();
+      const gap = now - lastRequestTs;
+      if (gap < MIN_REQUEST_GAP_MS) {
+        await new Promise((r) => setTimeout(r, MIN_REQUEST_GAP_MS - gap));
+      }
+      lastRequestTs = Date.now();
       weightLog.push({ weight, ts: Date.now() });
+      saveWeightLog();
       return;
     }
-    // wait until the oldest entry expires
+    // Wait until enough old entries expire
     const oldest = weightLog.length > 0 ? weightLog[0].ts : Date.now();
-    const waitMs = Math.max(200, oldest + WEIGHT_WINDOW_MS - Date.now() + 50);
+    const waitMs = Math.max(500, oldest + WEIGHT_WINDOW_MS - Date.now() + 100);
     console.warn(
-      `[hlbot] rate-limiter: used ${used}/${WEIGHT_LIMIT} weight, waiting ${waitMs}ms`
+      `[hlbot] rate-limiter: used ${used}/${WEIGHT_LIMIT} weight, waiting ${Math.round(waitMs / 1000)}s`
     );
-    await new Promise((r) => setTimeout(r, Math.min(waitMs, 5000)));
+    await new Promise((r) => setTimeout(r, Math.min(waitMs, 10_000)));
   }
 }
 
@@ -135,11 +178,12 @@ async function postInfo(body: Record<string, unknown>, timeoutMs = 15000): Promi
       });
       if (res.status === 429) {
         clearTimeout(timer);
+        onRateLimited(); // Mark budget as exhausted so other pending requests also wait
         if (attempt < maxRetries) {
           const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
           console.warn(`[hlbot] 429 rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`, body.type);
           await new Promise((r) => setTimeout(r, delay));
-          await waitForBudget(getWeight(body.type)); // re-acquire budget
+          await waitForBudget(getWeight(body.type)); // re-acquire budget after cooldown
           continue;
         }
         throw new Error(`API rate limited (429) after ${maxRetries} retries`);
@@ -263,39 +307,34 @@ export async function getAllPositions(
     }
   }
 
-  // Step 2: Query clearinghouseState for default dex + each HIP-3 dex
+  // Step 2: Query clearinghouseState for default dex + each HIP-3 dex (sequentially)
   const dexesToQuery = ["", ...dexNames]; // "" = standard perps
-  const results = await Promise.allSettled(
-    dexesToQuery.map(async (dex) => {
-      await sleep(dex === "" ? 0 : 200); // Stagger HIP-3 dex queries
+  const allPositions: Position[] = [];
+
+  for (const dex of dexesToQuery) {
+    try {
       const state = await getClearinghouseState(user, dex);
       if (!state.assetPositions || !Array.isArray(state.assetPositions)) {
-        return [];
+        continue;
       }
-      return state.assetPositions
+      const positions = state.assetPositions
         .filter((ap) => {
           const pos = ap.position || ap;
           return pos.szi && parseFloat(pos.szi) !== 0;
         })
         .map((ap) => {
           const pos = ap.position || ap;
-          // For HIP-3, coin might not have prefix in response; add it
           if (dex && pos.coin && !pos.coin.includes(":")) {
             pos.coin = `${dex}:${pos.coin}`;
           }
           return pos;
         });
-    })
-  );
-
-  const allPositions: Position[] = [];
-  for (const r of results) {
-    if (r.status === "fulfilled") {
-      allPositions.push(...r.value);
-    } else {
-      console.error(`[hlbot] Failed to fetch positions for dex:`, r.reason);
+      allPositions.push(...positions);
+    } catch (err) {
+      console.error(`[hlbot] Failed to fetch positions for dex ${dex}:`, err);
     }
   }
+
   return allPositions;
 }
 
@@ -330,10 +369,9 @@ export async function getAllMids(): Promise<Record<string, string>> {
 }
 
 export async function getAddressStats(address: string): Promise<AddressStats> {
-  const [fills, clearinghouse] = await Promise.all([
-    getAllUserFills(address, ALL_TIME_START, undefined, 10),
-    getClearinghouseState(address),
-  ]);
+  // Sequential to avoid burst; fills is the heavy part
+  const fills = await getAllUserFills(address, ALL_TIME_START, undefined, 10);
+  const clearinghouse = await getClearinghouseState(address);
 
   let totalVolume = 0;
   let totalFees = 0;
