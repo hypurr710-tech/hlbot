@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAddresses } from "@/lib/store";
 import {
   getAllMids,
@@ -42,8 +42,15 @@ export default function TradesPage() {
   const [filterAddress, setFilterAddress] = useState<string>("all");
   const [countdown, setCountdown] = useState(90);
 
-  // Phase 1: Fast data - portfolio stats + positions + prices (runs every 60s)
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Phase 1: Fast data - portfolio stats + positions + prices (runs every 90s)
   const fetchFastData = useCallback(async () => {
+    // Cancel any previous in-flight fetch
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     if (addresses.length === 0) {
       setPositions([]);
       setPortfolioVolume(0);
@@ -57,6 +64,7 @@ export default function TradesPage() {
     try {
       // Fetch mid prices first (lightweight, weight 2)
       const mids = await getAllMids().catch(() => ({} as Record<string, string>));
+      if (controller.signal.aborted) return;
       setMidPrices(mids);
 
       // Process each address fully sequentially (portfolio → positions) to avoid bursts
@@ -64,13 +72,15 @@ export default function TradesPage() {
       const positionResults: PromiseSettledResult<WalletPosition[]>[] = [];
 
       for (const a of addresses) {
+        if (controller.signal.aborted) return;
         // Portfolio first
         const [portfolioResult] = await Promise.allSettled([
           getPortfolioHistory(a.address),
         ]);
         portfolioResults.push(portfolioResult);
 
-        // Then positions (this internally calls getUserFills + clearinghouseState)
+        if (controller.signal.aborted) return;
+        // Then positions (lightweight: only clearinghouseState, weight 2)
         const [positionResult] = await Promise.allSettled([
           (async () => {
             const positions = await getAllPositions(a.address);
@@ -79,6 +89,8 @@ export default function TradesPage() {
         ]);
         positionResults.push(positionResult);
       }
+
+      if (controller.signal.aborted) return;
 
       // Portfolio volume & PnL
       let totalVlm = 0;
@@ -113,6 +125,7 @@ export default function TradesPage() {
       setLoading(false);
       setCountdown(90);
     } catch (err) {
+      if (controller.signal.aborted) return;
       console.error("Failed to fetch fast data:", err);
       setPositionError(String(err));
       setLoading(false);
@@ -129,7 +142,10 @@ export default function TradesPage() {
   // Auto-refresh: every 90s to stay within rate limits
   useEffect(() => {
     const interval = setInterval(fetchFastData, 90_000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      abortRef.current?.abort();
+    };
   }, [fetchFastData]);
 
   // Countdown timer

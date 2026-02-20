@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   AreaChart,
   Area,
@@ -196,6 +196,23 @@ export default function PortfolioChart({
     return vlm;
   }, [portfolioData, range]);
 
+  // Track container dimensions to avoid rendering chart with invalid size
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerReady, setContainerReady] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const check = () => {
+      const { width, height } = el.getBoundingClientRect();
+      setContainerReady(width > 0 && height > 0);
+    };
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   if (Object.keys(portfolioData).length === 0 && !loading) return null;
 
   // Updated colors to match the Hyperliquid teal theme
@@ -284,7 +301,7 @@ export default function PortfolioChart({
       )}
 
       {/* Chart */}
-      <div className="h-48 md:h-64">
+      <div ref={containerRef} className="h-48 md:h-64">
         {loading ? (
           <div className="w-full h-full flex items-center justify-center">
             <div className="skeleton w-full h-full rounded-lg" />
@@ -292,6 +309,10 @@ export default function PortfolioChart({
         ) : chartData.length === 0 ? (
           <div className="w-full h-full flex items-center justify-center text-sm text-hl-text-tertiary">
             No portfolio data available
+          </div>
+        ) : !containerReady ? (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="skeleton w-full h-full rounded-lg" />
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">

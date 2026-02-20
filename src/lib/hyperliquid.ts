@@ -55,10 +55,11 @@ function consumedWeight(): number {
   return weightLog.reduce((s, e) => s + e.weight, 0);
 }
 
-/** Call when we receive a 429 — marks the budget as fully exhausted. */
+/** Call when we receive a 429 — marks the budget as partially exhausted with a shorter cooldown. */
 function onRateLimited(): void {
   const now = Date.now();
-  weightLog = [{ weight: WEIGHT_LIMIT, ts: now }];
+  // Only block for ~30s instead of 60s by backdating the entry
+  weightLog = [{ weight: WEIGHT_LIMIT, ts: now - WEIGHT_WINDOW_MS / 2 }];
   saveWeightLog();
 }
 
@@ -290,52 +291,26 @@ export async function getClearinghouseState(
 }
 
 /**
- * Get positions across all dexes (standard perps + HIP-3 dexes).
- * First fetches recent fills to discover which HIP-3 dexes the user trades on,
- * then queries clearinghouseState for each dex.
+ * Get positions for standard perps via clearinghouseState (lightweight, weight 2).
  */
 export async function getAllPositions(
   user: string
 ): Promise<Position[]> {
-  // Step 1: Get recent fills to discover HIP-3 dex names
-  const recentFills = await getUserFills(user);
-  const dexNames = new Set<string>();
-  for (const fill of recentFills) {
-    const colonIdx = fill.coin.indexOf(":");
-    if (colonIdx > 0) {
-      dexNames.add(fill.coin.substring(0, colonIdx));
+  try {
+    const state = await getClearinghouseState(user);
+    if (!state.assetPositions || !Array.isArray(state.assetPositions)) {
+      return [];
     }
+    return state.assetPositions
+      .filter((ap) => {
+        const pos = ap.position || ap;
+        return pos.szi && parseFloat(pos.szi) !== 0;
+      })
+      .map((ap) => ap.position || ap);
+  } catch (err) {
+    console.error(`[hlbot] Failed to fetch positions for ${user.slice(0, 10)}:`, err);
+    return [];
   }
-
-  // Step 2: Query clearinghouseState for default dex + each HIP-3 dex (sequentially)
-  const dexesToQuery = ["", ...dexNames]; // "" = standard perps
-  const allPositions: Position[] = [];
-
-  for (const dex of dexesToQuery) {
-    try {
-      const state = await getClearinghouseState(user, dex);
-      if (!state.assetPositions || !Array.isArray(state.assetPositions)) {
-        continue;
-      }
-      const positions = state.assetPositions
-        .filter((ap) => {
-          const pos = ap.position || ap;
-          return pos.szi && parseFloat(pos.szi) !== 0;
-        })
-        .map((ap) => {
-          const pos = ap.position || ap;
-          if (dex && pos.coin && !pos.coin.includes(":")) {
-            pos.coin = `${dex}:${pos.coin}`;
-          }
-          return pos;
-        });
-      allPositions.push(...positions);
-    } catch (err) {
-      console.error(`[hlbot] Failed to fetch positions for dex ${dex}:`, err);
-    }
-  }
-
-  return allPositions;
 }
 
 export interface PortfolioPeriodData {
@@ -369,8 +344,8 @@ export async function getAllMids(): Promise<Record<string, string>> {
 }
 
 export async function getAddressStats(address: string): Promise<AddressStats> {
-  // Sequential to avoid burst; fills is the heavy part
-  const fills = await getAllUserFills(address, ALL_TIME_START, undefined, 10);
+  // Sequential to avoid burst; fills is the heavy part (capped at 3 pages to limit weight)
+  const fills = await getAllUserFills(address, ALL_TIME_START, undefined, 3);
   const clearinghouse = await getClearinghouseState(address);
 
   let totalVolume = 0;
