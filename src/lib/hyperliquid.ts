@@ -291,26 +291,65 @@ export async function getClearinghouseState(
 }
 
 /**
- * Get positions for standard perps via clearinghouseState (lightweight, weight 2).
+ * Get positions across all dexes (standard perps + HIP-3 dexes).
+ * Discovers HIP-3 dexes from recent fills, then queries each dex.
  */
 export async function getAllPositions(
   user: string
 ): Promise<Position[]> {
+  const allPositions: Position[] = [];
+
+  // Step 1: Get standard perps positions (weight 2)
   try {
     const state = await getClearinghouseState(user);
-    if (!state.assetPositions || !Array.isArray(state.assetPositions)) {
-      return [];
-    }
-    return state.assetPositions
-      .filter((ap) => {
+    if (state.assetPositions && Array.isArray(state.assetPositions)) {
+      for (const ap of state.assetPositions) {
         const pos = ap.position || ap;
-        return pos.szi && parseFloat(pos.szi) !== 0;
-      })
-      .map((ap) => ap.position || ap);
+        if (pos.szi && parseFloat(pos.szi) !== 0) {
+          allPositions.push(pos);
+        }
+      }
+    }
   } catch (err) {
-    console.error(`[hlbot] Failed to fetch positions for ${user.slice(0, 10)}:`, err);
-    return [];
+    console.error(`[hlbot] Failed to fetch perp positions for ${user.slice(0, 10)}:`, err);
   }
+
+  // Step 2: Discover HIP-3 dexes from recent fills (weight 20, single call)
+  let dexNames: Set<string>;
+  try {
+    const recentFills = await getUserFills(user);
+    dexNames = new Set<string>();
+    for (const fill of recentFills) {
+      const colonIdx = fill.coin.indexOf(":");
+      if (colonIdx > 0) {
+        dexNames.add(fill.coin.substring(0, colonIdx));
+      }
+    }
+  } catch (err) {
+    console.error(`[hlbot] Failed to discover HIP-3 dexes for ${user.slice(0, 10)}:`, err);
+    return allPositions;
+  }
+
+  // Step 3: Query each HIP-3 dex (weight 2 each)
+  for (const dex of dexNames) {
+    try {
+      const state = await getClearinghouseState(user, dex);
+      if (!state.assetPositions || !Array.isArray(state.assetPositions)) continue;
+      for (const ap of state.assetPositions) {
+        const pos = ap.position || ap;
+        if (pos.szi && parseFloat(pos.szi) !== 0) {
+          if (pos.coin && !pos.coin.includes(":")) {
+            pos.coin = `${dex}:${pos.coin}`;
+          }
+          allPositions.push(pos);
+        }
+      }
+    } catch (err) {
+      console.error(`[hlbot] Failed to fetch HIP-3 positions for dex ${dex}:`, err);
+    }
+  }
+
+  return allPositions;
 }
 
 export interface PortfolioPeriodData {
