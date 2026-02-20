@@ -1,449 +1,543 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import VoiceVisualizer from "@/components/VoiceVisualizer";
-import { useVoice } from "@/lib/useVoice";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useAddresses } from "@/lib/store";
+import {
+  getAddressStats,
+  getAddressStatsLight,
+  getPortfolioHistory,
+  AddressStats,
+  PortfolioPeriodData,
+} from "@/lib/hyperliquid";
+import { formatUsd, pnlColor } from "@/lib/format";
+import StatCard from "@/components/StatCard";
+import PortfolioChart from "@/components/PortfolioChart";
+import Link from "next/link";
 
-interface Message {
-  role: "user" | "assistant";
-  content: string;
+/** Safely parse a number, returning 0 for NaN/undefined */
+function safeNum(val: number | undefined | null): number {
+  if (val === undefined || val === null || isNaN(val)) return 0;
+  return val;
 }
 
-function ApiKeyModal({
-  onSave,
+/** Get the latest value from a portfolio history array */
+function latestFromHistory(history: [number, string][] | undefined): number {
+  if (!history || history.length === 0) return 0;
+  return safeNum(parseFloat(history[history.length - 1][1]));
+}
+
+import { TrackedAddress, saveAddresses } from "@/lib/store";
+
+type AddrSortKey = "label" | "portfolio" | "volume" | "pnl" | "fees";
+
+function PerAddressTable({
+  stats,
+  addresses,
+  portfolioData,
+  loading,
 }: {
-  onSave: (key: string) => void;
+  stats: AddressStats[];
+  addresses: TrackedAddress[];
+  portfolioData: Record<string, Record<string, PortfolioPeriodData>>;
+  loading: boolean;
 }) {
-  const [key, setKey] = useState("");
+  const { setAddresses } = useAddresses();
+  const [sortKey, setSortKey] = useState<AddrSortKey>("portfolio");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  const rows = useMemo(() => {
+    return stats.map((s) => {
+      const addrLabel = addresses.find(
+        (a) => a.address.toLowerCase() === s.address.toLowerCase()
+      )?.label || "";
+      const portfolio = latestFromHistory(
+        portfolioData[s.address]?.allTime?.accountValueHistory
+      );
+      const volume = safeNum(parseFloat(portfolioData[s.address]?.allTime?.vlm || "0"));
+      const pnl = latestFromHistory(portfolioData[s.address]?.allTime?.pnlHistory);
+      const fees = safeNum(s.totalFees) + safeNum(s.totalBuilderFees);
+      return { address: s.address, label: addrLabel, portfolio, volume, pnl, fees };
+    });
+  }, [stats, addresses, portfolioData]);
+
+  const sorted = useMemo(() => {
+    const arr = [...rows];
+    const mul = sortDir === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      if (sortKey === "label") return mul * a.label.localeCompare(b.label);
+      return mul * (a[sortKey] - b[sortKey]);
+    });
+    return arr;
+  }, [rows, sortKey, sortDir]);
+
+  const handleSort = (key: AddrSortKey) => {
+    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const icon = (key: AddrSortKey) => {
+    if (sortKey !== key) return "↕";
+    return sortDir === "asc" ? "↑" : "↓";
+  };
+
+  const handleDrop = (toIdx: number) => {
+    if (dragIdx === null || dragIdx === toIdx) { setDragIdx(null); setDragOverIdx(null); return; }
+    const updated = [...addresses];
+    const [moved] = updated.splice(dragIdx, 1);
+    updated.splice(toIdx, 0, moved);
+    saveAddresses(updated);
+    setAddresses(updated);
+    setDragIdx(null);
+    setDragOverIdx(null);
+    setSortKey("label"); // reset to manual order
+  };
+
+  // When using manual drag, show addresses order; when sorting, show sorted
+  const displayRows = sortKey === "label" && sortDir === "asc" ?
+    addresses.map((a) => rows.find((r) => r.address.toLowerCase() === a.address.toLowerCase())).filter(Boolean) as typeof rows :
+    sorted;
+
+  const cols: { key: AddrSortKey; label: string; align: string }[] = [
+    { key: "label", label: "Address", align: "left" },
+    { key: "portfolio", label: "Portfolio Value", align: "right" },
+    { key: "volume", label: "All-Time Volume", align: "right" },
+    { key: "pnl", label: "All-Time PnL", align: "right" },
+    { key: "fees", label: "All-Time Fees", align: "right" },
+  ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-8 max-w-md w-full shadow-2xl">
-        <div className="text-center mb-6">
-          <div className="w-14 h-14 bg-gradient-to-br from-[#ff6b6b] to-[#ee5a24] rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold text-white mb-2">Welcome to Aria</h2>
-          <p className="text-sm text-white/50">
-            Enter your OpenAI API key to start practicing English.
-            Your key is stored only in your browser.
-          </p>
+    <div>
+      <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
+        Per-Address Breakdown
+      </h2>
+      <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[600px]">
+          <thead>
+            <tr className="border-b border-hl-border">
+              {cols.map((col) => (
+                <th
+                  key={col.key}
+                  onClick={() => handleSort(col.key)}
+                  className={`px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-${col.align} cursor-pointer hover:text-hl-accent transition-colors select-none`}
+                >
+                  {col.label} <span className="text-hl-accent">{icon(col.key)}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading
+              ? Array.from({ length: 3 }).map((_, i) => (
+                  <tr key={i} className="border-b border-hl-border/50">
+                    {Array.from({ length: 5 }).map((_, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="skeleton h-4 w-20" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              : displayRows.map((r, idx) => (
+                  <tr
+                    key={r.address}
+                    draggable
+                    onDragStart={() => setDragIdx(idx)}
+                    onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
+                    onDrop={() => handleDrop(idx)}
+                    onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+                    className={`border-b border-hl-border/50 transition-all cursor-grab active:cursor-grabbing ${
+                      dragIdx === idx ? "opacity-40" : dragOverIdx === idx ? "bg-hl-accent/5 border-t-2 border-t-hl-accent" : "hover:bg-hl-bg-hover/50"
+                    }`}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-3.5 h-3.5 text-hl-text-tertiary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+                        </svg>
+                        <div className="flex flex-col">
+                          {r.label && (
+                            <span className="text-sm font-medium text-hl-text-primary">{r.label}</span>
+                          )}
+                          <span className="text-xs font-mono text-hl-text-tertiary">
+                            {r.address.slice(0, 6)}...{r.address.slice(-4)}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
+                      {formatUsd(r.portfolio)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
+                      {formatUsd(r.volume)}
+                    </td>
+                    <td className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(r.pnl)}`}>
+                      {formatUsd(r.pnl)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-mono text-hl-red">
+                      {formatUsd(r.fees)}
+                    </td>
+                  </tr>
+                ))}
+          </tbody>
+        </table>
         </div>
-        <input
-          type="password"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="sk-..."
-          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#ff6b6b]/50 transition-colors"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && key.trim()) onSave(key.trim());
-          }}
-        />
-        <button
-          onClick={() => key.trim() && onSave(key.trim())}
-          disabled={!key.trim()}
-          className="w-full mt-4 py-3 bg-gradient-to-r from-[#ff6b6b] to-[#ee5a24] text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
-        >
-          Start Conversation
-        </button>
       </div>
     </div>
   );
 }
 
-export default function SpeakingPartner() {
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [currentTranscript, setCurrentTranscript] = useState("");
-  const [streamingText, setStreamingText] = useState("");
-  const [autoSpeak, setAutoSpeak] = useState(true);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const { isRecording, audioLevel, startRecording, stopRecording } = useVoice();
+export default function Dashboard() {
+  const { addresses } = useAddresses();
+  const [stats, setStats] = useState<AddressStats[]>([]);
+  const [portfolioData, setPortfolioData] = useState<
+    Record<string, Record<string, PortfolioPeriodData>>
+  >({});
+  const [loading, setLoading] = useState(true);
+  const [portfolioLoading, setPortfolioLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const hasLoadedOnce = useRef(false);
 
-  // Load API key from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem("aria_api_key");
-    if (stored) setApiKey(stored);
-  }, []);
-
-  // Auto-scroll to latest message
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingText]);
-
-  const saveApiKey = (key: string) => {
-    localStorage.setItem("aria_api_key", key);
-    setApiKey(key);
-  };
-
-  const speak = useCallback(
-    async (text: string) => {
-      if (!apiKey || !autoSpeak) return;
-      setIsSpeaking(true);
-      try {
-        const res = await fetch("/api/tts", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-          },
-          body: JSON.stringify({ text, voice: "nova" }),
-        });
-        if (!res.ok) throw new Error("TTS failed");
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        audio.onended = () => {
-          setIsSpeaking(false);
-          URL.revokeObjectURL(url);
-        };
-        audio.play();
-      } catch (err) {
-        console.error("TTS error:", err);
-        setIsSpeaking(false);
-      }
-    },
-    [apiKey, autoSpeak]
-  );
-
-  const sendToChat = useCallback(
-    async (userText: string) => {
-      if (!apiKey) return;
-
-      const userMessage: Message = { role: "user", content: userText };
-      const updatedMessages = [...messages, userMessage];
-      setMessages(updatedMessages);
-      setIsProcessing(true);
-      setStreamingText("");
-
-      try {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-          },
-          body: JSON.stringify({
-            messages: updatedMessages.map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
-          }),
-        });
-
-        if (!res.ok) throw new Error("Chat request failed");
-
-        const reader = res.body?.getReader();
-        const decoder = new TextDecoder();
-        let fullText = "";
-
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value);
-            const lines = chunk.split("\n");
-            for (const line of lines) {
-              if (line.startsWith("data: ") && line !== "data: [DONE]") {
-                try {
-                  const data = JSON.parse(line.slice(6));
-                  fullText += data.text;
-                  setStreamingText(fullText);
-                } catch {
-                  // skip malformed JSON
-                }
-              }
-            }
-          }
-        }
-
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: fullText,
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-        setStreamingText("");
-        setIsProcessing(false);
-
-        // Speak the response
-        speak(fullText);
-      } catch (err) {
-        console.error("Chat error:", err);
-        setIsProcessing(false);
-        setStreamingText("");
-      }
-    },
-    [apiKey, messages, speak]
-  );
-
-  const handleRecordToggle = async () => {
-    if (isSpeaking) {
-      // Stop current playback
-      audioRef.current?.pause();
-      setIsSpeaking(false);
+  const fetchStats = useCallback(async () => {
+    if (addresses.length === 0) {
+      setStats([]);
+      setPortfolioData({});
+      setLoading(false);
+      setPortfolioLoading(false);
       return;
     }
 
-    if (isRecording) {
-      // Stop recording and process
-      const audioBlob = await stopRecording();
-      if (!audioBlob || !apiKey) return;
+    const isFirstLoad = !hasLoadedOnce.current;
 
-      setIsProcessing(true);
-      setCurrentTranscript("Listening...");
+    // Only show loading skeleton on the very first fetch
+    if (isFirstLoad) {
+      setLoading(true);
+      setPortfolioLoading(true);
+    }
 
+    // Phase 1: portfolio + lightweight stats (fast, no fill pagination)
+    // Process each address sequentially to spread requests and avoid bursts
+    try {
+      const portfolioResults: PromiseSettledResult<{ address: string; data: Record<string, PortfolioPeriodData> }>[] = [];
+      const lightStatsResults: PromiseSettledResult<AddressStats>[] = [];
+
+      for (const a of addresses) {
+        // Fully sequential: portfolio first, then light stats
+        const [portfolioResult] = await Promise.allSettled([
+          (async () => ({ address: a.address, data: await getPortfolioHistory(a.address) }))(),
+        ]);
+        portfolioResults.push(portfolioResult);
+
+        const [lightResult] = await Promise.allSettled([
+          getAddressStatsLight(a.address),
+        ]);
+        lightStatsResults.push(lightResult);
+      }
+
+      const newPortfolio: Record<
+        string,
+        Record<string, PortfolioPeriodData>
+      > = {};
+      for (const r of portfolioResults) {
+        if (r.status === "fulfilled") {
+          newPortfolio[r.value.address] = r.value.data;
+        }
+      }
+      setPortfolioData(newPortfolio);
+      setPortfolioLoading(false);
+
+      // Only use light stats on first load; on refresh keep existing full data
+      if (isFirstLoad) {
+        const lightStats = lightStatsResults
+          .filter(
+            (r): r is PromiseFulfilledResult<AddressStats> =>
+              r.status === "fulfilled"
+          )
+          .map((r) => r.value);
+        setStats(lightStats);
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("Failed to fetch portfolio:", err);
+      setPortfolioLoading(false);
+      setLoading(false);
+    }
+
+    // Phase 2: full all-time stats with fills (only on first load — too heavy for polling)
+    if (isFirstLoad) {
       try {
-        // Send to Whisper for transcription
-        const formData = new FormData();
-        formData.append("audio", audioBlob, "recording.webm");
-
-        const res = await fetch("/api/stt", {
-          method: "POST",
-          headers: { "x-api-key": apiKey },
-          body: formData,
-        });
-
-        if (!res.ok) throw new Error("STT failed");
-        const { text } = await res.json();
-
-        if (text && text.trim()) {
-          setCurrentTranscript("");
-          sendToChat(text.trim());
-        } else {
-          setCurrentTranscript("");
-          setIsProcessing(false);
+        // Process addresses sequentially to avoid burst requests
+        const fullStats: AddressStats[] = [];
+        for (const a of addresses) {
+          try {
+            const stat = await getAddressStats(a.address);
+            fullStats.push(stat);
+          } catch (err) {
+            console.error(`Failed to fetch full stats for ${a.address.slice(0, 10)}:`, err);
+          }
+        }
+        if (fullStats.length > 0) {
+          setStats(fullStats);
         }
       } catch (err) {
-        console.error("STT error:", err);
-        setCurrentTranscript("");
-        setIsProcessing(false);
-      }
-    } else {
-      // Start recording
-      try {
-        await startRecording();
-      } catch {
-        alert("Microphone access is required for voice chat.");
+        console.error("Failed to fetch full stats:", err);
       }
     }
-  };
 
-  const handleTextSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const input = form.querySelector("input") as HTMLInputElement;
-    const text = input.value.trim();
-    if (!text || isProcessing) return;
-    input.value = "";
-    sendToChat(text);
-  };
+    hasLoadedOnce.current = true;
+    setLoading(false);
+    setLastUpdated(new Date());
+  }, [addresses]);
 
-  if (!apiKey) {
-    return <ApiKeyModal onSave={saveApiKey} />;
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 120_000); // 2min interval to stay within rate limits
+    return () => clearInterval(interval);
+  }, [fetchStats]);
+
+  // All-time stats from fills
+  const totals = stats.reduce(
+    (acc, s) => ({
+      volume: acc.volume + safeNum(s.totalVolume),
+      fees: acc.fees + safeNum(s.totalFees),
+      builderFees: acc.builderFees + safeNum(s.totalBuilderFees),
+      realizedPnl: acc.realizedPnl + safeNum(s.realizedPnl),
+      unrealizedPnl: acc.unrealizedPnl + safeNum(s.unrealizedPnl),
+      accountValue: acc.accountValue + safeNum(s.accountValue),
+      trades: acc.trades + safeNum(s.totalTrades),
+    }),
+    {
+      volume: 0,
+      fees: 0,
+      builderFees: 0,
+      realizedPnl: 0,
+      unrealizedPnl: 0,
+      accountValue: 0,
+      trades: 0,
+    }
+  );
+
+  // All-time stats from portfolio API (includes spot + perps + staked)
+  const portfolioValue = Object.values(portfolioData).reduce((sum, d) => {
+    return sum + latestFromHistory(d.allTime?.accountValueHistory);
+  }, 0);
+
+  const allTimeVolume = Object.values(portfolioData).reduce((sum, d) => {
+    return sum + safeNum(parseFloat(d.allTime?.vlm || "0"));
+  }, 0);
+
+  const allTimePnl = Object.values(portfolioData).reduce((sum, d) => {
+    return sum + latestFromHistory(d.allTime?.pnlHistory);
+  }, 0);
+
+  if (addresses.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] animate-fade-in relative">
+        {/* Background Purr scene */}
+        <div className="relative mb-6">
+          <div className="absolute inset-0 bg-gradient-to-t from-hl-bg-primary via-transparent to-transparent z-10 rounded-2xl" />
+          <img
+            src="/purr-main.jpg"
+            alt="Purr - Hyperliquid Mascot"
+            className="rounded-2xl opacity-80 max-w-[360px] w-full"
+          />
+        </div>
+        <h2 className="text-2xl font-bold gradient-text mb-2">
+          Welcome to Hypurr Tracker
+        </h2>
+        <p className="text-sm text-hl-text-secondary mb-6 text-center max-w-md">
+          Add your Hyperliquid wallet addresses to start tracking your
+          portfolio, trading volume, fees, and PnL.
+        </p>
+        <Link
+          href="/address"
+          className="px-6 py-3 bg-hl-accent text-hl-bg-primary rounded-lg text-sm font-semibold hover:bg-hl-accent/90 transition-colors"
+        >
+          Add Address
+        </Link>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#0f0f1a]">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 md:px-6 py-4 border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-gradient-to-br from-[#ff6b6b] to-[#ee5a24] rounded-full flex items-center justify-center">
-            <span className="text-white text-sm font-bold">A</span>
-          </div>
-          <div>
-            <h1 className="text-base font-semibold text-white">Aria</h1>
-            <p className="text-[11px] text-white/40">English Speaking Partner</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setAutoSpeak(!autoSpeak)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors ${
-              autoSpeak
-                ? "bg-[#ff6b6b]/15 text-[#ff6b6b]"
-                : "bg-white/5 text-white/40"
-            }`}
-            title={autoSpeak ? "Voice responses on" : "Voice responses off"}
-          >
-            {autoSpeak ? (
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
-              </svg>
-            ) : (
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
-              </svg>
-            )}
-            {autoSpeak ? "Voice on" : "Voice off"}
-          </button>
-          <button
-            onClick={() => {
-              localStorage.removeItem("aria_api_key");
-              setApiKey(null);
-              setMessages([]);
-            }}
-            className="px-3 py-1.5 rounded-full text-xs bg-white/5 text-white/40 hover:text-white/60 transition-colors"
-          >
-            Reset Key
-          </button>
-        </div>
-      </header>
-
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-6 space-y-4">
-        {messages.length === 0 && !streamingText && (
-          <div className="flex flex-col items-center justify-center h-full text-center animate-fade-in">
-            <VoiceVisualizer audioLevel={0} isActive={false} size={100} />
-            <h2 className="text-xl font-semibold text-white mt-6 mb-2">
-              Hi, I&apos;m Aria
-            </h2>
-            <p className="text-sm text-white/40 max-w-sm">
-              Your English speaking partner. Tap the mic button and start talking.
-              I&apos;ll help you improve your English through natural conversation.
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <img
+            src="/purr-avatar.png"
+            alt="Purr"
+            width={40}
+            height={40}
+            className="rounded-full object-cover flex-shrink-0 hidden sm:block"
+          />
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-semibold text-hl-text-primary">
+              Dashboard
+            </h1>
+            <p className="text-xs md:text-sm text-hl-text-secondary mt-1">
+              {addresses.length} address{addresses.length !== 1 ? "es" : ""}{" "}
+              tracked
             </p>
-            <div className="flex flex-wrap justify-center gap-2 mt-6">
-              {[
-                "Tell me about your day",
-                "Let's talk about movies",
-                "Help me practice ordering food",
-                "Discuss a news topic",
-              ].map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => sendToChat(suggestion)}
-                  className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-xs text-white/60 hover:bg-white/10 hover:text-white/80 transition-colors"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
           </div>
-        )}
-
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-fade-in`}
-          >
-            <div
-              className={`max-w-[80%] md:max-w-[65%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-[#ff6b6b]/15 text-white/90 rounded-br-md"
-                  : "bg-white/5 text-white/80 rounded-bl-md"
-              }`}
-            >
-              {msg.content}
-            </div>
-          </div>
-        ))}
-
-        {/* Streaming response */}
-        {streamingText && (
-          <div className="flex justify-start animate-fade-in">
-            <div className="max-w-[80%] md:max-w-[65%] px-4 py-3 rounded-2xl rounded-bl-md bg-white/5 text-white/80 text-sm leading-relaxed">
-              {streamingText}
-              <span className="inline-block w-1.5 h-4 bg-[#ff6b6b] ml-0.5 animate-pulse" />
-            </div>
-          </div>
-        )}
-
-        {/* Processing indicator */}
-        {isProcessing && !streamingText && (
-          <div className="flex justify-start animate-fade-in">
-            <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-white/5">
-              <div className="flex gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-[#ff6b6b]/60 animate-bounce" style={{ animationDelay: "0ms" }} />
-                <div className="w-2 h-2 rounded-full bg-[#ff6b6b]/60 animate-bounce" style={{ animationDelay: "150ms" }} />
-                <div className="w-2 h-2 rounded-full bg-[#ff6b6b]/60 animate-bounce" style={{ animationDelay: "300ms" }} />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {currentTranscript && (
-          <div className="flex justify-end animate-fade-in">
-            <div className="px-4 py-3 rounded-2xl rounded-br-md bg-[#ff6b6b]/10 text-white/50 text-sm italic">
-              {currentTranscript}
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Bottom Controls */}
-      <div className="border-t border-white/5 px-4 md:px-6 py-4">
-        <div className="flex items-center gap-3 max-w-2xl mx-auto">
-          {/* Text input */}
-          <form onSubmit={handleTextSubmit} className="flex-1 flex">
-            <input
-              type="text"
-              placeholder="Type a message..."
-              disabled={isProcessing}
-              className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#ff6b6b]/30 transition-colors disabled:opacity-50"
-            />
-          </form>
-
-          {/* Mic button */}
+        </div>
+        <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+          {lastUpdated && (
+            <span className="text-xs text-hl-text-tertiary hidden sm:inline">
+              Updated{" "}
+              {lastUpdated.toLocaleTimeString("en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              })}
+            </span>
+          )}
           <button
-            onClick={handleRecordToggle}
-            disabled={isProcessing && !isSpeaking}
-            className={`relative flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center transition-all ${
-              isRecording
-                ? "bg-[#ff6b6b] shadow-lg shadow-[#ff6b6b]/30 scale-110"
-                : isSpeaking
-                  ? "bg-[#ff6b6b]/20 border-2 border-[#ff6b6b]/50"
-                  : "bg-white/10 hover:bg-white/15"
-            } disabled:opacity-40`}
+            onClick={fetchStats}
+            disabled={loading}
+            className="px-3 md:px-4 py-2 bg-hl-bg-tertiary border border-hl-border rounded-lg text-xs font-medium text-hl-text-secondary hover:text-hl-text-primary hover:border-hl-border-light transition-colors disabled:opacity-50"
           >
-            {/* Recording visualizer ring */}
-            {isRecording && (
-              <div
-                className="absolute inset-0 rounded-full border-2 border-[#ff6b6b] animate-ping"
-                style={{ animationDuration: "1.5s" }}
-              />
-            )}
-
-            {isSpeaking ? (
-              // Stop icon when AI is speaking
-              <svg className="w-5 h-5 text-[#ff6b6b]" fill="currentColor" viewBox="0 0 24 24">
-                <rect x="6" y="6" width="12" height="12" rx="2" />
-              </svg>
-            ) : (
-              // Mic icon
-              <svg
-                className={`w-5 h-5 ${isRecording ? "text-white" : "text-white/70"}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z"
-                />
-              </svg>
-            )}
+            {loading ? "Loading..." : "Refresh"}
           </button>
         </div>
-
-        {/* Recording indicator */}
-        {isRecording && (
-          <div className="flex items-center justify-center gap-2 mt-3">
-            <div className="w-2 h-2 rounded-full bg-[#ff6b6b] animate-pulse" />
-            <span className="text-xs text-[#ff6b6b]/80">
-              Recording... tap mic to stop
-            </span>
-          </div>
-        )}
       </div>
+
+      {/* Top Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <StatCard
+          title="Portfolio Value"
+          value={formatUsd(portfolioValue)}
+          subtitle="Perps + Spot + Staked"
+          loading={portfolioLoading}
+        />
+        <StatCard
+          title="All-Time PnL"
+          value={formatUsd(allTimePnl)}
+          subtitle="Combined"
+          loading={portfolioLoading}
+        />
+        <StatCard
+          title="All-Time Volume"
+          value={formatUsd(allTimeVolume)}
+          subtitle={`${totals.trades.toLocaleString()} trades`}
+          loading={portfolioLoading}
+        />
+        <StatCard
+          title="All-Time Fees"
+          value={formatUsd(totals.fees + totals.builderFees)}
+          subtitle={`Trading ${formatUsd(totals.fees)} + Builder ${formatUsd(totals.builderFees)}`}
+          loading={loading}
+        />
+      </div>
+
+      {/* Portfolio Chart with Volume/PnL */}
+      <PortfolioChart
+        portfolioData={portfolioData}
+        loading={portfolioLoading}
+      />
+
+      {/* Per-Address Breakdown */}
+      <PerAddressTable
+        stats={stats}
+        addresses={addresses}
+        portfolioData={portfolioData}
+        loading={loading}
+      />
+
+      {/* Active Positions */}
+      {!loading && stats.some((s) => s.positions.length > 0) && (
+        <div>
+          <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
+            Active Positions
+          </h2>
+          <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead>
+                <tr className="border-b border-hl-border">
+                  <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-left">
+                    Address
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-left">
+                    Coin
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
+                    Size
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
+                    Entry Price
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
+                    Leverage
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
+                    uPnL
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium text-hl-text-tertiary uppercase tracking-wider text-right">
+                    Liq. Price
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.flatMap((s) =>
+                  s.positions.map((p) => {
+                    const addrLabel = addresses.find(
+                      (a) =>
+                        a.address.toLowerCase() === s.address.toLowerCase()
+                    )?.label;
+                    const size = parseFloat(p.szi);
+                    const upnl = safeNum(parseFloat(p.unrealizedPnl));
+                    return (
+                      <tr
+                        key={`${s.address}-${p.coin}`}
+                        className="border-b border-hl-border/50 hover:bg-hl-bg-hover/50 transition-colors"
+                      >
+                        <td className="px-4 py-3 text-xs font-mono text-hl-text-tertiary">
+                          {addrLabel ||
+                            `${s.address.slice(0, 6)}...${s.address.slice(-4)}`}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-hl-text-primary">
+                          {p.coin}
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-right text-sm font-mono ${
+                            size >= 0 ? "text-hl-green" : "text-hl-red"
+                          }`}
+                        >
+                          {size >= 0 ? "+" : ""}
+                          {size.toFixed(4)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-primary">
+                          {p.entryPx
+                            ? `$${parseFloat(p.entryPx).toFixed(2)}`
+                            : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-yellow">
+                          {p.leverage.value}x
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-right text-sm font-mono ${pnlColor(
+                            upnl
+                          )}`}
+                        >
+                          {formatUsd(upnl)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-mono text-hl-text-secondary">
+                          {p.liquidationPx
+                            ? `$${parseFloat(p.liquidationPx).toFixed(2)}`
+                            : "-"}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
