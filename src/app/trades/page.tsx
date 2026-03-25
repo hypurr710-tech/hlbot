@@ -11,6 +11,7 @@ import {
 } from "@/lib/hyperliquid";
 import { formatUsd, pnlColor, formatAddress } from "@/lib/format";
 import StatCard from "@/components/StatCard";
+import Link from "next/link";
 
 interface WalletPosition extends Position {
   wallet: string;
@@ -176,6 +177,26 @@ export default function TradesPage() {
     (sum, p) => sum + parseFloat(p.unrealizedPnl),
     0
   );
+
+  if (addresses.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] animate-fade-in">
+        <div className="text-4xl mb-4">📊</div>
+        <h2 className="text-xl font-semibold text-hl-text-primary mb-2">
+          No Addresses Tracked
+        </h2>
+        <p className="text-sm text-hl-text-secondary mb-6 text-center max-w-md">
+          Add your Hyperliquid wallet addresses to view your active positions and trading activity.
+        </p>
+        <Link
+          href="/address"
+          className="px-6 py-3 bg-hl-accent text-hl-bg-primary rounded-lg text-sm font-semibold hover:bg-hl-accent/90 transition-colors"
+        >
+          Add Address
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">

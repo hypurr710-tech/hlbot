@@ -10,6 +10,8 @@ export default function AddressPage() {
   const { addresses, setAddresses } = useAddresses();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const handleAdd = (address: string, label: string) => {
     const updated = addAddress(address, label);
@@ -17,8 +19,19 @@ export default function AddressPage() {
   };
 
   const handleRemove = (address: string) => {
+    if (confirmDelete !== address) {
+      setConfirmDelete(address);
+      return;
+    }
     const updated = removeAddress(address);
     setAddresses(updated);
+    setConfirmDelete(null);
+  };
+
+  const handleCopy = (address: string) => {
+    navigator.clipboard.writeText(address);
+    setCopiedAddress(address);
+    setTimeout(() => setCopiedAddress(null), 2000);
   };
 
   const handleLabelChange = (address: string, newLabel: string) => {
@@ -155,25 +168,27 @@ export default function AddressPage() {
                           {formatAddress(addr.address)}
                         </span>
                         <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(addr.address);
-                          }}
+                          onClick={() => handleCopy(addr.address)}
                           className="text-hl-text-tertiary hover:text-hl-text-secondary transition-colors"
                           title="주소 복사"
                         >
-                          <svg
-                            className="w-3.5 h-3.5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={1.5}
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"
-                            />
-                          </svg>
+                          {copiedAddress === addr.address ? (
+                            <span className="text-[11px] text-hl-accent font-medium">Copied!</span>
+                          ) : (
+                            <svg
+                              className="w-3.5 h-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={1.5}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"
+                              />
+                            </svg>
+                          )}
                         </button>
                       </div>
 
@@ -206,25 +221,43 @@ export default function AddressPage() {
                   </div>
 
                   {/* Delete button */}
-                  <button
-                    onClick={() => handleRemove(addr.address)}
-                    className="p-2 rounded-lg text-hl-text-tertiary hover:text-hl-red hover:bg-hl-red/10 transition-colors ml-4"
-                    title="주소 삭제"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={1.5}
+                  <div className="flex items-center gap-2 ml-4">
+                    {confirmDelete === addr.address && (
+                      <button
+                        onClick={() => setConfirmDelete(null)}
+                        className="px-2 py-1 rounded text-[11px] text-hl-text-tertiary hover:text-hl-text-secondary transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleRemove(addr.address)}
+                      className={`p-2 rounded-lg transition-colors ${
+                        confirmDelete === addr.address
+                          ? "text-hl-red bg-hl-red/10 hover:bg-hl-red/20"
+                          : "text-hl-text-tertiary hover:text-hl-red hover:bg-hl-red/10"
+                      }`}
+                      title={confirmDelete === addr.address ? "확인 - 삭제" : "주소 삭제"}
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-                      />
-                    </svg>
-                  </button>
+                      {confirmDelete === addr.address ? (
+                        <span className="text-[11px] font-medium px-1">Delete?</span>
+                      ) : (
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={1.5}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

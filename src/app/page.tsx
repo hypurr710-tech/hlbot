@@ -13,6 +13,7 @@ import { formatUsd, pnlColor } from "@/lib/format";
 import StatCard from "@/components/StatCard";
 import PortfolioChart from "@/components/PortfolioChart";
 import Link from "next/link";
+import { exportToCSV } from "@/lib/export";
 
 /** Safely parse a number, returning 0 for NaN/undefined */
 function safeNum(val: number | undefined | null): number {
@@ -198,6 +199,33 @@ export default function Dashboard() {
   const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const hasLoadedOnce = useRef(false);
+  const [countdown, setCountdown] = useState(120);
+  const [posFilter, setPosFilter] = useState("");
+
+  const handleExport = () => {
+    const allPositions = stats.flatMap((s) =>
+      s.positions.map((p) => {
+        const label = addresses.find(
+          (a) => a.address.toLowerCase() === s.address.toLowerCase()
+        )?.label || s.address;
+        return [
+          label,
+          p.coin,
+          parseFloat(p.szi) >= 0 ? "LONG" : "SHORT",
+          p.szi,
+          p.entryPx || "-",
+          p.leverage.value + "x",
+          parseFloat(p.unrealizedPnl).toFixed(2),
+          p.liquidationPx || "-",
+        ];
+      })
+    );
+    exportToCSV(
+      ["Address", "Coin", "Side", "Size", "Entry Price", "Leverage", "uPnL", "Liq. Price"],
+      allPositions,
+      `hypurr-positions-${new Date().toISOString().slice(0, 10)}`
+    );
+  };
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -302,6 +330,7 @@ export default function Dashboard() {
       hasLoadedOnce.current = true;
       setLoading(false);
       setLastUpdated(new Date());
+      setCountdown(120);
     }
   }, [addresses]);
 
@@ -313,6 +342,14 @@ export default function Dashboard() {
       abortRef.current?.abort();
     };
   }, [fetchStats]);
+
+  // Countdown timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown((prev) => (prev <= 1 ? 120 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // All-time stats from fills
   const totals = stats.reduce(
@@ -402,15 +439,27 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
           {lastUpdated && (
-            <span className="text-xs text-hl-text-tertiary hidden sm:inline">
-              Updated{" "}
-              {lastUpdated.toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              })}
+            <span className="text-xs text-hl-text-tertiary">
+              <span className="hidden sm:inline">
+                Updated{" "}
+                {lastUpdated.toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                })}
+                {" · "}
+              </span>
+              <span className="font-mono tabular-nums">{countdown}s</span>
             </span>
           )}
+          <button
+            onClick={handleExport}
+            disabled={loading || stats.length === 0}
+            className="hidden sm:block px-3 py-2 bg-hl-bg-tertiary border border-hl-border rounded-lg text-xs font-medium text-hl-text-secondary hover:text-hl-text-primary hover:border-hl-border-light transition-colors disabled:opacity-50"
+            title="Export CSV"
+          >
+            CSV
+          </button>
           <button
             onClick={fetchStats}
             disabled={loading}
@@ -466,10 +515,95 @@ export default function Dashboard() {
       {/* Active Positions */}
       {!loading && stats.some((s) => s.positions.length > 0) && (
         <div>
-          <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
-            Active Positions
-          </h2>
-          <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between mb-4 gap-3">
+            <h2 className="text-lg font-semibold text-hl-text-primary">
+              Active Positions
+            </h2>
+            <input
+              type="text"
+              placeholder="Filter by coin..."
+              value={posFilter}
+              onChange={(e) => setPosFilter(e.target.value)}
+              className="bg-hl-bg-tertiary border border-hl-border rounded-lg px-3 py-1.5 text-xs text-hl-text-primary placeholder:text-hl-text-tertiary focus:outline-none focus:border-hl-accent/50 transition-colors w-36 md:w-44"
+            />
+          </div>
+
+          {/* Mobile: Card layout */}
+          <div className="md:hidden space-y-3">
+            {stats.flatMap((s) =>
+              s.positions.filter((p) => !posFilter || p.coin.toLowerCase().includes(posFilter.toLowerCase())).map((p) => {
+                const addrLabel = addresses.find(
+                  (a) => a.address.toLowerCase() === s.address.toLowerCase()
+                )?.label;
+                const size = parseFloat(p.szi);
+                const isLong = size > 0;
+                const upnl = safeNum(parseFloat(p.unrealizedPnl));
+                const levType = p.leverage.type === "isolated" ? "iso" : "cross";
+                return (
+                  <div
+                    key={`mobile-${s.address}-${p.coin}`}
+                    className="bg-hl-bg-secondary border border-hl-border rounded-xl p-4 space-y-3"
+                  >
+                    {/* Top row: Token, Side, Leverage */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-semibold text-hl-text-primary">{p.coin}</span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                            isLong ? "bg-hl-green/15 text-hl-green" : "bg-hl-red/15 text-hl-red"
+                          }`}
+                        >
+                          {isLong ? "LONG" : "SHORT"}
+                        </span>
+                        <span className="text-xs font-mono text-hl-yellow font-medium">
+                          {p.leverage.value}x<span className="text-hl-text-tertiary ml-0.5">{levType}</span>
+                        </span>
+                      </div>
+                      <span className={`text-sm font-mono font-semibold ${pnlColor(upnl)}`}>
+                        {formatUsd(upnl)}
+                      </span>
+                    </div>
+
+                    {/* Wallet label */}
+                    {addresses.length > 1 && (
+                      <div className="text-[11px] text-hl-text-tertiary -mt-1">
+                        {addrLabel || `${s.address.slice(0, 6)}...${s.address.slice(-4)}`}
+                      </div>
+                    )}
+
+                    {/* Data grid */}
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-hl-text-tertiary">Size</span>
+                        <span className={`font-mono ${isLong ? "text-hl-green" : "text-hl-red"}`}>
+                          {isLong ? "+" : ""}{size.toFixed(4)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-hl-text-tertiary">Entry</span>
+                        <span className="font-mono text-hl-text-primary">
+                          {p.entryPx ? `$${parseFloat(p.entryPx).toFixed(2)}` : "-"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-hl-text-tertiary">Leverage</span>
+                        <span className="font-mono text-hl-yellow">{p.leverage.value}x</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-hl-text-tertiary">Liq.</span>
+                        <span className="font-mono text-hl-text-tertiary">
+                          {p.liquidationPx ? `$${parseFloat(p.liquidationPx).toFixed(2)}` : "-"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop: Table layout */}
+          <div className="hidden md:block bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full min-w-[700px]">
               <thead>
@@ -499,7 +633,7 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {stats.flatMap((s) =>
-                  s.positions.map((p) => {
+                  s.positions.filter((p) => !posFilter || p.coin.toLowerCase().includes(posFilter.toLowerCase())).map((p) => {
                     const addrLabel = addresses.find(
                       (a) =>
                         a.address.toLowerCase() === s.address.toLowerCase()
