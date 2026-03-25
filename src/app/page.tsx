@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useAddresses } from "@/lib/store";
+import { useAddresses, TrackedAddress, saveAddresses } from "@/lib/store";
 import {
   getAddressStats,
   getAddressStatsLight,
@@ -9,24 +9,11 @@ import {
   AddressStats,
   PortfolioPeriodData,
 } from "@/lib/hyperliquid";
-import { formatUsd, pnlColor } from "@/lib/format";
+import { formatUsd, pnlColor, safeNum, latestFromHistory } from "@/lib/format";
+import { CONFIG } from "@/lib/config";
 import StatCard from "@/components/StatCard";
 import PortfolioChart from "@/components/PortfolioChart";
 import Link from "next/link";
-
-/** Safely parse a number, returning 0 for NaN/undefined */
-function safeNum(val: number | undefined | null): number {
-  if (val === undefined || val === null || isNaN(val)) return 0;
-  return val;
-}
-
-/** Get the latest value from a portfolio history array */
-function latestFromHistory(history: [number, string][] | undefined): number {
-  if (!history || history.length === 0) return 0;
-  return safeNum(parseFloat(history[history.length - 1][1]));
-}
-
-import { TrackedAddress, saveAddresses } from "@/lib/store";
 
 type AddrSortKey = "label" | "portfolio" | "volume" | "pnl" | "fees";
 
@@ -271,7 +258,7 @@ export default function Dashboard() {
       }
     } catch (err) {
       if (controller.signal.aborted) return;
-      console.error("Failed to fetch portfolio:", err);
+      console.error("[hlbot] Failed to fetch portfolio:", err);
       setPortfolioLoading(false);
       setLoading(false);
     }
@@ -287,14 +274,14 @@ export default function Dashboard() {
             const stat = await getAddressStats(a.address);
             fullStats.push(stat);
           } catch (err) {
-            console.error(`Failed to fetch full stats for ${a.address.slice(0, 10)}:`, err);
+            console.error(`[hlbot] Failed to fetch full stats for ${a.address.slice(0, 10)}:`, err);
           }
         }
         if (fullStats.length > 0 && !controller.signal.aborted) {
           setStats(fullStats);
         }
       } catch (err) {
-        console.error("Failed to fetch full stats:", err);
+        console.error("[hlbot] Failed to fetch full stats:", err);
       }
     }
 
@@ -307,7 +294,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, 120_000); // 2min interval to stay within rate limits
+    const interval = setInterval(fetchStats, CONFIG.timing.dashboardRefreshMs);
     return () => {
       clearInterval(interval);
       abortRef.current?.abort();
