@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   AreaChart,
   Area,
@@ -200,18 +200,28 @@ export default function PortfolioChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerReady, setContainerReady] = useState(false);
 
+  const checkDimensions = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    setContainerReady(width > 0 && height > 0);
+  }, []);
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const check = () => {
-      const { width, height } = el.getBoundingClientRect();
-      setContainerReady(width > 0 && height > 0);
-    };
-    check();
-    const observer = new ResizeObserver(check);
+    checkDimensions();
+    const observer = new ResizeObserver(checkDimensions);
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [checkDimensions]);
+
+  // Re-check dimensions when loading transitions to false (chart first becomes visible)
+  useEffect(() => {
+    if (!loading) {
+      requestAnimationFrame(checkDimensions);
+    }
+  }, [loading, checkDimensions]);
 
   if (Object.keys(portfolioData).length === 0 && !loading) return null;
 

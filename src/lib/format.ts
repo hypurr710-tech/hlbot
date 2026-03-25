@@ -1,3 +1,22 @@
+/** Safely parse a number, returning 0 for NaN/undefined/null */
+export function safeNum(val: number | undefined | null): number {
+  if (val === undefined || val === null || isNaN(val)) return 0;
+  return val;
+}
+
+/** Get the latest value from a portfolio history array */
+export function latestFromHistory(history: [number, string][] | undefined): number {
+  if (!history || history.length === 0) return 0;
+  return safeNum(parseFloat(history[history.length - 1][1]));
+}
+
+/** Format price with dynamic decimal places based on magnitude */
+export function formatPrice(val: number): string {
+  if (val >= 100) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (val >= 1) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  return val.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+}
+
 export function formatUsd(value: number): string {
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";

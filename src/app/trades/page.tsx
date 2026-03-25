@@ -9,22 +9,12 @@ import {
   Position,
   PortfolioPeriodData,
 } from "@/lib/hyperliquid";
-import { formatUsd, pnlColor, formatAddress } from "@/lib/format";
+import { formatUsd, pnlColor, formatAddress, safeNum, formatPrice } from "@/lib/format";
+import { CONFIG } from "@/lib/config";
 import StatCard from "@/components/StatCard";
 
 interface WalletPosition extends Position {
   wallet: string;
-}
-
-function safeNum(val: number | undefined | null): number {
-  if (val === undefined || val === null || isNaN(val)) return 0;
-  return val;
-}
-
-function formatPrice(val: number): string {
-  if (val >= 100) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (val >= 1) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-  return val.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 6 });
 }
 
 export default function TradesPage() {
@@ -40,7 +30,8 @@ export default function TradesPage() {
   const [positionError, setPositionError] = useState<string | null>(null);
   const [filterCoin, setFilterCoin] = useState<string>("all");
   const [filterAddress, setFilterAddress] = useState<string>("all");
-  const [countdown, setCountdown] = useState(90);
+  const refreshSec = CONFIG.timing.tradesRefreshMs / 1000;
+  const [countdown, setCountdown] = useState(refreshSec);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -123,10 +114,10 @@ export default function TradesPage() {
       setPositions(allPositions);
       setPositionError(errors.length > 0 ? errors.join("; ") : null);
       setLoading(false);
-      setCountdown(90);
+      setCountdown(refreshSec);
     } catch (err) {
       if (controller.signal.aborted) return;
-      console.error("Failed to fetch fast data:", err);
+      console.error("[hlbot] Failed to fetch fast data:", err);
       setPositionError(String(err));
       setLoading(false);
     }
@@ -141,7 +132,7 @@ export default function TradesPage() {
 
   // Auto-refresh: every 90s to stay within rate limits
   useEffect(() => {
-    const interval = setInterval(fetchFastData, 90_000);
+    const interval = setInterval(fetchFastData, CONFIG.timing.tradesRefreshMs);
     return () => {
       clearInterval(interval);
       abortRef.current?.abort();
@@ -151,7 +142,7 @@ export default function TradesPage() {
   // Countdown timer
   useEffect(() => {
     const timer = setInterval(() => {
-      setCountdown((prev) => (prev <= 1 ? 90 : prev - 1));
+      setCountdown((prev) => (prev <= 1 ? refreshSec : prev - 1));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
