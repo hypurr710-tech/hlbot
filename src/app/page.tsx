@@ -12,8 +12,20 @@ import {
 import { formatUsd, pnlColor, safeNum, latestFromHistory } from "@/lib/format";
 import { CONFIG } from "@/lib/config";
 import StatCard from "@/components/StatCard";
-import PortfolioChart from "@/components/PortfolioChart";
+import dynamic from "next/dynamic";
 import Link from "next/link";
+
+const PortfolioChart = dynamic(
+  () => import("@/components/PortfolioChart"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-4 md:p-6 h-[340px]">
+        <div className="skeleton w-full h-full rounded-lg" />
+      </div>
+    ),
+  }
+);
 
 type AddrSortKey = "label" | "portfolio" | "volume" | "pnl" | "fees";
 
