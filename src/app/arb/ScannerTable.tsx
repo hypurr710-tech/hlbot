@@ -10,7 +10,7 @@ import {
   selectLiveKrPrice,
   isLiveKrFromNxt,
 } from "@/lib/arb";
-import { pnlColor } from "@/lib/format";
+import { pnlColor, formatNumber } from "@/lib/format";
 
 type SortKey = "apr" | "premium" | "funding" | "volume";
 
@@ -232,7 +232,7 @@ function OpportunityCard({ row: r }: { row: Row }) {
             {formatKrw(Math.round(r.hlPriceInKrw))}
           </div>
           <div className="text-sm text-hl-text-tertiary font-mono mt-0.5">
-            ≈ ${r.hlMarkUsd.toFixed(2)} USD
+            ≈ ${formatNumber(r.hlMarkUsd, 2)} USD
           </div>
         </div>
         <div className={`px-3 py-2 rounded-lg border ${premiumBg} text-right`}>
@@ -344,7 +344,7 @@ function OpportunityCard({ row: r }: { row: Row }) {
               24h 예상 펀딩 <span className="text-hl-text-tertiary/60 normal-case">/ 1주</span>
             </div>
             <div className={`text-base font-mono tabular-nums ${pnlColor(r.projected24hFundingUsd)}`}>
-              {r.projected24hFundingUsd >= 0 ? "+" : ""}${r.projected24hFundingUsd.toFixed(2)}
+              {r.projected24hFundingUsd >= 0 ? "+" : ""}${formatNumber(r.projected24hFundingUsd, 2)}
             </div>
           </div>
         </div>
@@ -388,13 +388,13 @@ function OpportunityCard({ row: r }: { row: Row }) {
             <div className="text-right">
               <div className="text-[10px] text-hl-text-tertiary uppercase">월 예상 펀딩</div>
               <div className={`text-base font-bold ${pnlColor(simMonthlyUsd)}`}>
-                {simMonthlyUsd >= 0 ? "+" : ""}${simMonthlyUsd.toFixed(0)}
+                {simMonthlyUsd >= 0 ? "+" : ""}${formatNumber(simMonthlyUsd, 0)}
               </div>
             </div>
             <div className="text-right">
               <div className="text-[10px] text-hl-text-tertiary uppercase">연 예상 펀딩</div>
               <div className={`text-base font-bold ${pnlColor(simYearlyUsd)}`}>
-                {simYearlyUsd >= 0 ? "+" : ""}${simYearlyUsd.toFixed(0)}
+                {simYearlyUsd >= 0 ? "+" : ""}${formatNumber(simYearlyUsd, 0)}
               </div>
             </div>
           </div>
@@ -409,7 +409,7 @@ function OpportunityCard({ row: r }: { row: Row }) {
               <div className="text-[10px] text-hl-text-tertiary uppercase">
                 하이퍼리퀴드 <span className="text-hl-text-tertiary/60">숏 · 1x</span>
               </div>
-              <div className="text-sm font-bold text-hl-text-primary">${simHlUsd.toFixed(0)}</div>
+              <div className="text-sm font-bold text-hl-text-primary">${formatNumber(simHlUsd, 0)}</div>
             </div>
             <div className="text-right">
               <div className="text-[10px] text-hl-text-tertiary uppercase">
@@ -419,7 +419,7 @@ function OpportunityCard({ row: r }: { row: Row }) {
             </div>
             <div className="text-right">
               <div className="text-[10px] text-hl-text-tertiary uppercase">합계</div>
-              <div className="text-sm font-bold text-hl-text-secondary">≈ ${simTotalUsd.toFixed(0)}</div>
+              <div className="text-sm font-bold text-hl-text-secondary">≈ ${formatNumber(simTotalUsd, 0)}</div>
             </div>
           </div>
         </div>
