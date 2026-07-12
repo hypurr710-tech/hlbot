@@ -29,3 +29,50 @@ describe("arb.calcPremiumPct", () => {
     expect(hlPriceKrw(1474.85, 1503.4)).toBeCloseTo(2217289.49, 1);
   });
 });
+
+import { calcCapitalUsd, calcAprPct } from "@/lib/arb";
+
+describe("arb.calcCapitalUsd", () => {
+  it("sums HL notional and KR spot cost", () => {
+    // HL: 1 unit × $1474.85 = $1474.85
+    // KR: 1 share × ₩2,170,000 / 1494 (hana) = $1452.48
+    const c = calcCapitalUsd({
+      hlSizeAbs: 1,
+      hlMarkUsd: 1474.85,
+      krQuantity: 1,
+      krAvgPriceKrw: 2170000,
+      usdKrwHana: 1494,
+    });
+    expect(c).toBeCloseTo(2927.33, 1);
+  });
+
+  it("returns 0 when both sides are 0", () => {
+    expect(calcCapitalUsd({
+      hlSizeAbs: 0, hlMarkUsd: 100, krQuantity: 0, krAvgPriceKrw: 100, usdKrwHana: 1000
+    })).toBe(0);
+  });
+});
+
+describe("arb.calcAprPct", () => {
+  it("annualizes hourly funding against total capital", () => {
+    // Notional $1474.85, funding 0.0055%/h = 0.000055, capital $2927.33
+    // fundingUsd/h = 1474.85 * 0.000055 = 0.081117
+    // annual = 0.081117 * 8760 = 710.58
+    // APR = 710.58 / 2927.33 = 24.27%
+    const apr = calcAprPct({
+      hlNotionalUsd: 1474.85,
+      fundingHourly: 0.000055,
+      capitalUsd: 2927.33,
+    });
+    expect(apr).toBeCloseTo(24.27, 1);
+  });
+
+  it("returns 0 when capital is 0", () => {
+    expect(calcAprPct({ hlNotionalUsd: 100, fundingHourly: 0.0001, capitalUsd: 0 })).toBe(0);
+  });
+
+  it("returns negative APR when funding is negative", () => {
+    const apr = calcAprPct({ hlNotionalUsd: 1000, fundingHourly: -0.0001, capitalUsd: 2000 });
+    expect(apr).toBeLessThan(0);
+  });
+});
