@@ -143,7 +143,45 @@ describe("arb.isLiveKrFromNxt", () => {
   });
 });
 
-import { calcRealizedAprPct, calcTotalReturnPct, aggregateFundingByPeriod } from "@/lib/arb";
+import { calcRealizedAprPct, calcTotalReturnPct, aggregateFundingByPeriod, calcRecentAprPct, isAprReliable } from "@/lib/arb";
+
+describe("arb.calcRecentAprPct", () => {
+  const NOW = new Date(2026, 6, 12, 12, 0).getTime();
+  const h = (n: number) => NOW - n * 3600000;
+  it("annualizes only funding within the trailing window", () => {
+    // $24 across the last 24h, capital $1000, opened long ago
+    const events = [
+      { time: h(30), usdc: 100 }, // outside 24h window → excluded
+      { time: h(20), usdc: 12 },
+      { time: h(2), usdc: 12 },
+    ];
+    const apr = calcRecentAprPct({ events, capitalUsd: 1000, windowHours: 24, nowMs: NOW, openedAtMs: h(200) });
+    // perHour = 24/24 = 1 → perYear 8760 → 876%
+    expect(apr).toBeCloseTo(876, 0);
+  });
+  it("uses elapsed-since-open when younger than the window (no dilution)", () => {
+    // opened 6h ago, $6 funding → perHour 1 → 876%, NOT divided by full 24h
+    const events = [{ time: h(3), usdc: 6 }];
+    const apr = calcRecentAprPct({ events, capitalUsd: 1000, windowHours: 24, nowMs: NOW, openedAtMs: h(6) });
+    expect(apr).toBeCloseTo(876, 0);
+  });
+  it("returns 0 for zero capital or no elapsed time", () => {
+    expect(calcRecentAprPct({ events: [{ time: h(1), usdc: 5 }], capitalUsd: 0, windowHours: 24, nowMs: NOW, openedAtMs: h(6) })).toBe(0);
+    expect(calcRecentAprPct({ events: [], capitalUsd: 1000, windowHours: 24, nowMs: NOW, openedAtMs: NOW })).toBe(0);
+  });
+});
+
+describe("arb.isAprReliable", () => {
+  it("false while the sample is too short to annualize", () => {
+    expect(isAprReliable(1, 1)).toBe(false);
+    expect(isAprReliable(23, 5)).toBe(false);
+    expect(isAprReliable(48, 2)).toBe(false);
+  });
+  it("true once there is enough elapsed time and settlements", () => {
+    expect(isAprReliable(24, 3)).toBe(true);
+    expect(isAprReliable(100, 20)).toBe(true);
+  });
+});
 
 describe("arb.calcRealizedAprPct", () => {
   it("annualizes actual funding by elapsed hours over capital", () => {
@@ -204,6 +242,14 @@ describe("arb.aggregateFundingByPeriod", () => {
   });
   it("returns empty array for empty input", () => {
     expect(aggregateFundingByPeriod([], "day")).toEqual([]);
+  });
+  it("labels buckets with the LOCAL calendar date/hour, not UTC", () => {
+    // Event at local 2026-07-12 10:30. For any non-UTC machine (e.g. KST),
+    // the label must still read the local date, not a UTC-shifted one.
+    const local = [{ time: new Date(2026, 6, 12, 10, 30).getTime(), usdc: 5 }];
+    expect(aggregateFundingByPeriod(local, "hour")[0].key).toBe("2026-07-12 10");
+    expect(aggregateFundingByPeriod(local, "day")[0].key).toBe("2026-07-12");
+    expect(aggregateFundingByPeriod(local, "month")[0].key).toBe("2026-07");
   });
   it("sorts buckets chronologically", () => {
     const outOfOrder = [

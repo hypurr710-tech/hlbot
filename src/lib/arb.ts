@@ -106,6 +106,8 @@ export interface FundingBucket {
   count: number;       // number of events in bucket
 }
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
 export function aggregateFundingByPeriod(
   events: Array<{ time: number; usdc: number }>,
   period: FundingPeriod
@@ -113,24 +115,62 @@ export function aggregateFundingByPeriod(
   const buckets = new Map<string, FundingBucket>();
   for (const e of events) {
     const d = new Date(e.time);
+    const y = d.getFullYear();
+    const mo = d.getMonth();
+    const day = d.getDate();
+    // Labels are derived from LOCAL calendar components (not toISOString, which
+    // is UTC and shifts the label by the timezone offset — e.g. KST would render
+    // the previous day / 9 hours earlier).
     let key: string;
     let ts: number;
     if (period === "hour") {
-      const hourStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()).getTime();
-      key = new Date(hourStart).toISOString().slice(0, 13);
-      ts = hourStart;
+      ts = new Date(y, mo, day, d.getHours()).getTime();
+      key = `${y}-${pad2(mo + 1)}-${pad2(day)} ${pad2(d.getHours())}`;
     } else if (period === "day") {
-      const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-      key = new Date(dayStart).toISOString().slice(0, 10);
-      ts = dayStart;
+      ts = new Date(y, mo, day).getTime();
+      key = `${y}-${pad2(mo + 1)}-${pad2(day)}`;
     } else {
-      const monthStart = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-      key = new Date(monthStart).toISOString().slice(0, 7);
-      ts = monthStart;
+      ts = new Date(y, mo, 1).getTime();
+      key = `${y}-${pad2(mo + 1)}`;
     }
     const b = buckets.get(key);
     if (b) { b.usdc += e.usdc; b.count += 1; }
     else buckets.set(key, { key, ts, usdc: e.usdc, count: 1 });
   }
   return Array.from(buckets.values()).sort((a, b) => a.ts - b.ts);
+}
+
+/**
+ * Forward-looking APR from the funding actually collected over a trailing
+ * window (default caller passes 24h). Unlike the instantaneous 1h rate, this
+ * smooths hour-to-hour funding noise. When the position is younger than the
+ * window, it annualizes over the elapsed time so a fresh position isn't diluted
+ * by counting hours before it existed.
+ */
+export function calcRecentAprPct(args: {
+  events: Array<{ time: number; usdc: number }>;
+  capitalUsd: number;
+  windowHours: number;
+  nowMs: number;
+  openedAtMs: number;
+}): number {
+  const { events, capitalUsd, windowHours, nowMs, openedAtMs } = args;
+  if (capitalUsd <= 0) return 0;
+  const windowStart = Math.max(nowMs - windowHours * 3600000, openedAtMs);
+  const effectiveHours = (nowMs - windowStart) / 3600000;
+  if (effectiveHours <= 0) return 0;
+  const sum = events
+    .filter((e) => e.time >= windowStart)
+    .reduce((s, e) => s + e.usdc, 0);
+  const perYear = (sum / effectiveHours) * 24 * 365;
+  return (perYear / capitalUsd) * 100;
+}
+
+/**
+ * Whether an annualized APR is statistically meaningful yet. Right after open a
+ * single funding sample annualizes to absurd values, so we gate the display on a
+ * minimum elapsed window and settlement count.
+ */
+export function isAprReliable(elapsedHours: number, settlementCount: number): boolean {
+  return elapsedHours >= 24 && settlementCount >= 3;
 }
