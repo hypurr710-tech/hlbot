@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLiveSnapshot } from "./useLiveSnapshot";
 import { useHlXyzShorts } from "./useHlXyzShorts";
 import { useArbPairs } from "@/hooks/useArbPairs";
+import { pairOpenedAt } from "@/lib/arbStore";
 import { fetchFundingWithCache } from "./useFundingHistory";
 import type { FundingEvent } from "@/lib/hyperliquid";
 import LedgerPanel from "./LedgerPanel";
@@ -10,7 +11,7 @@ import ScannerPanel from "./ScannerPanel";
 import SummaryStrip from "./SummaryStrip";
 
 export default function ArbPage() {
-  const { snapshot, error } = useLiveSnapshot();
+  const { snapshot, error, lastUpdated, refreshing, refetch } = useLiveSnapshot();
   const shorts = useHlXyzShorts();
   const { pairs } = useArbPairs();
 
@@ -68,12 +69,13 @@ export default function ArbPage() {
     const now = Date.now();
     const m: Record<string, { totalFundingUsd: number; elapsedHours: number }> = {};
     for (const p of activePairs) {
+      const openedAt = pairOpenedAt(p);
       const walletEvents = fundingByAddress[p.hlAddress.toLowerCase()] ?? [];
       const symbolShort = p.hlSymbol.split(":").pop() ?? p.hlSymbol;
       const total = walletEvents
-        .filter((e) => e.time >= p.createdAt && (e.delta.coin === p.hlSymbol || e.delta.coin === symbolShort))
+        .filter((e) => e.time >= openedAt && (e.delta.coin === p.hlSymbol || e.delta.coin === symbolShort))
         .reduce((s, e) => s + parseFloat(e.delta.usdc), 0);
-      const elapsedHours = Math.max(0, now - p.createdAt) / 3600000;
+      const elapsedHours = Math.max(0, now - openedAt) / 3600000;
       m[p.id] = { totalFundingUsd: total, elapsedHours };
     }
     return m;
@@ -90,12 +92,20 @@ export default function ArbPage() {
             Hyperliquid × KRX 델타 헤지 원장
           </p>
         </div>
-        {snapshot && (
-          <div className="text-xs text-hl-text-tertiary font-mono">
-            USDT/KRW {snapshot.fx.usdtKrwUpbit?.toFixed(2) ?? "—"} · USD/KRW{" "}
-            {snapshot.fx.usdKrwHana?.toFixed(2) ?? "—"}
-          </div>
-        )}
+        <div className="flex flex-col items-end gap-1.5">
+          {snapshot && (
+            <div className="text-xs text-hl-text-tertiary font-mono">
+              USDT/KRW {snapshot.fx.usdtKrwUpbit?.toFixed(2) ?? "—"} · USD/KRW{" "}
+              {snapshot.fx.usdKrwHana?.toFixed(2) ?? "—"}
+            </div>
+          )}
+          <FreshnessIndicator
+            lastUpdated={lastUpdated}
+            refreshing={refreshing}
+            hasError={!!error}
+            onRefresh={refetch}
+          />
+        </div>
       </div>
 
       {error && (
@@ -150,10 +160,51 @@ export default function ArbPage() {
               <li>· 프리미엄 = (HL × USDT/KRW − KR 라이브가) / KR 라이브가</li>
               <li>· 델타중립 판정: |불일치| &lt; 3%</li>
               <li>· 갱신 주기 5s (라이브가) / 60s (펀딩 이벤트)</li>
+              <li className="text-hl-yellow/70">· 모든 수익률은 <span className="font-semibold">gross</span> — HL 수수료·국내 거래세·환전 스프레드 미반영</li>
             </ul>
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function FreshnessIndicator({
+  lastUpdated,
+  refreshing,
+  hasError,
+  onRefresh,
+}: {
+  lastUpdated: number | null;
+  refreshing: boolean;
+  hasError: boolean;
+  onRefresh: () => void;
+}) {
+  // Re-render every second so the "N초 전" age stays live between polls.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const ageSec = lastUpdated != null ? Math.max(0, Math.round((Date.now() - lastUpdated) / 1000)) : null;
+  const stale = ageSec != null && ageSec > 15;
+  const dotColor = hasError ? "bg-hl-red" : stale ? "bg-hl-yellow" : "bg-hl-green";
+  const ageLabel =
+    ageSec == null ? "연결 중…" : ageSec < 2 ? "방금" : ageSec < 60 ? `${ageSec}초 전` : `${Math.floor(ageSec / 60)}분 전`;
+
+  return (
+    <div className="flex items-center gap-2 text-[11px] text-hl-text-tertiary font-mono">
+      <span className={`inline-block w-1.5 h-1.5 rounded-full ${dotColor} ${!hasError && !stale ? "pulse-green" : ""}`} />
+      <span>{hasError ? "연결 오류" : `LIVE · ${ageLabel}`}</span>
+      <button
+        onClick={onRefresh}
+        disabled={refreshing}
+        title="지금 새로고침"
+        className="px-1.5 py-0.5 rounded border border-hl-border text-hl-text-secondary hover:text-hl-text-primary hover:border-hl-border-light disabled:opacity-40 transition-colors"
+      >
+        <span className={`inline-block ${refreshing ? "animate-spin" : ""}`}>↻</span>
+      </button>
     </div>
   );
 }

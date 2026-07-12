@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { KrLeg } from "@/lib/arbStore";
 import { getTickerByHl } from "@/lib/tickerMap";
 
@@ -7,27 +7,51 @@ interface Props {
   hlAddress: string;
   hlSymbol: string;
   initial?: KrLeg;
-  onSave: (leg: KrLeg) => void;
+  initialOpenedAt?: number;
+  onSave: (leg: KrLeg, openedAt: number) => void;
   onCancel: () => void;
 }
 
-export default function PairEditModal({ hlAddress, hlSymbol, initial, onSave, onCancel }: Props) {
+/** ms → "YYYY-MM-DDTHH:mm" in local time, for <input type="datetime-local">. */
+function toLocalInput(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+export default function PairEditModal({ hlAddress, hlSymbol, initial, initialOpenedAt, onSave, onCancel }: Props) {
   const suggested = getTickerByHl(hlSymbol);
   const [krCode, setKrCode] = useState(initial?.krCode ?? suggested?.krCode ?? "");
   const [krName, setKrName] = useState(initial?.krName ?? suggested?.krName ?? "");
   const [quantity, setQuantity] = useState(String(initial?.quantity ?? ""));
   const [avgPrice, setAvgPrice] = useState(String(initial?.avgPriceKrw ?? ""));
   const [brokerLabel, setBrokerLabel] = useState(initial?.brokerLabel ?? "");
+  const [openedAt, setOpenedAt] = useState(toLocalInput(initialOpenedAt ?? Date.now()));
+
+  const openedAtMs = (() => {
+    const t = new Date(openedAt).getTime();
+    return Number.isFinite(t) ? t : Date.now();
+  })();
 
   const canSave =
     krCode.length > 0 &&
     krName.length > 0 &&
     parseFloat(quantity) > 0 &&
-    parseFloat(avgPrice) > 0;
+    parseFloat(avgPrice) > 0 &&
+    Number.isFinite(new Date(openedAt).getTime());
+
+  // Close on ESC — matches the backdrop-click affordance.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onCancel}>
       <div
+        role="dialog"
+        aria-modal="true"
         className="bg-hl-bg-secondary border border-hl-border rounded-xl p-6 w-full max-w-md space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
@@ -63,6 +87,16 @@ export default function PairEditModal({ hlAddress, hlSymbol, initial, onSave, on
             </div>
           </div>
           <div>
+            <label className="block text-xs text-hl-text-tertiary mb-1">
+              포지션 오픈 시각 <span className="text-hl-text-tertiary/60">(HL 숏 진입 시점)</span>
+            </label>
+            <input type="datetime-local" value={openedAt} onChange={(e) => setOpenedAt(e.target.value)}
+              className="w-full bg-hl-bg-tertiary border border-hl-border rounded px-3 py-2 font-mono text-hl-text-primary" />
+            <p className="text-[10px] text-hl-text-tertiary mt-1">
+              실현 펀딩·경과 시간을 이 시점부터 집계합니다. 실제 진입 시각으로 맞추세요.
+            </p>
+          </div>
+          <div>
             <label className="block text-xs text-hl-text-tertiary mb-1">Broker (optional)</label>
             <input value={brokerLabel} onChange={(e) => setBrokerLabel(e.target.value)}
               className="w-full bg-hl-bg-tertiary border border-hl-border rounded px-3 py-2 text-hl-text-primary" />
@@ -76,14 +110,17 @@ export default function PairEditModal({ hlAddress, hlSymbol, initial, onSave, on
           <button
             disabled={!canSave}
             onClick={() =>
-              onSave({
-                krCode,
-                krName,
-                quantity: parseFloat(quantity),
-                avgPriceKrw: parseFloat(avgPrice),
-                entryTs: initial?.entryTs ?? Date.now(),
-                brokerLabel: brokerLabel || undefined,
-              })
+              onSave(
+                {
+                  krCode,
+                  krName,
+                  quantity: parseFloat(quantity),
+                  avgPriceKrw: parseFloat(avgPrice),
+                  entryTs: initial?.entryTs ?? openedAtMs,
+                  brokerLabel: brokerLabel || undefined,
+                },
+                openedAtMs
+              )
             }
             className="px-4 py-1.5 text-xs font-semibold rounded bg-hl-accent text-hl-bg-primary disabled:opacity-40"
           >

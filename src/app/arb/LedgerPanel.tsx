@@ -41,15 +41,16 @@ export default function LedgerPanel({ snapshot, shorts, fundingByAddress }: Prop
       markPx: snapshot?.hl[s.hlSymbol]?.markPx ?? 0,
     }));
 
-  const handleSave = (leg: KrLeg) => {
+  const handleSave = (leg: KrLeg, openedAt: number) => {
     if (modalState?.mode === "create") {
       addPair({
         hlAddress: modalState.short.hlAddress,
         hlSymbol: modalState.short.hlSymbol,
         krLeg: leg,
+        openedAt,
       });
     } else if (modalState?.mode === "edit") {
-      updatePair(modalState.pair.id, { krLeg: leg });
+      updatePair(modalState.pair.id, { krLeg: leg, openedAt });
     }
     setModalState(null);
   };
@@ -159,6 +160,7 @@ export default function LedgerPanel({ snapshot, shorts, fundingByAddress }: Prop
           hlAddress={modalState.pair.hlAddress}
           hlSymbol={modalState.pair.hlSymbol}
           initial={modalState.pair.krLeg}
+          initialOpenedAt={modalState.pair.openedAt ?? modalState.pair.createdAt}
           onSave={handleSave}
           onCancel={() => setModalState(null)}
         />

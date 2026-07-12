@@ -13,8 +13,16 @@ export interface ArbPair {
   hlSymbol: string;
   krLeg: KrLeg;
   createdAt: number;
+  /** Actual time the HL short was opened. Falls back to createdAt if unset.
+   *  Used as the start point for realized-funding accounting. */
+  openedAt?: number;
   closedAt?: number;
   note?: string;
+}
+
+/** The point from which realized funding / elapsed time is measured for a pair. */
+export function pairOpenedAt(pair: ArbPair): number {
+  return pair.openedAt ?? pair.createdAt;
 }
 
 const KEY = "hypurr_arb_pairs";

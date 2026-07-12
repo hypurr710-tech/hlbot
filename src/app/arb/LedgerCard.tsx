@@ -8,8 +8,11 @@ import {
   calcDeltaMismatchPct,
   isDeltaNeutral,
   calcRealizedAprPct,
+  calcRecentAprPct,
   calcTotalReturnPct,
+  isAprReliable,
 } from "@/lib/arb";
+import { pairOpenedAt } from "@/lib/arbStore";
 import { formatUsd, pnlColor } from "@/lib/format";
 import FundingHistoryChart from "./FundingHistoryChart";
 
@@ -55,11 +58,12 @@ export default function LedgerCard({
 
   // Realized metrics — filter events to since-open and derive stats
   const now = Date.now();
-  const elapsedMs = Math.max(0, now - pair.createdAt);
+  const openedAt = pairOpenedAt(pair);
+  const elapsedMs = Math.max(0, now - openedAt);
   const elapsedHours = elapsedMs / 3600000;
   const elapsedDays = elapsedMs / 86400000;
 
-  const eventsSinceOpen = realizedFundingEvents.filter((e) => e.time >= pair.createdAt);
+  const eventsSinceOpen = realizedFundingEvents.filter((e) => e.time >= openedAt);
   const totalRealizedFunding = eventsSinceOpen.reduce((s, e) => s + e.usdc, 0);
   const settlementCount = eventsSinceOpen.length;
 
@@ -67,6 +71,18 @@ export default function LedgerCard({
     totalFundingUsd: totalRealizedFunding,
     capitalUsd: capital,
     elapsedHours,
+  });
+  // Gate the annualized figure until there's enough history — a single early
+  // settlement annualizes to absurd numbers.
+  const aprReliable = isAprReliable(elapsedHours, settlementCount);
+  // Trailing-window run-rate: smooths hour-to-hour funding noise, unlike the
+  // instantaneous 1h rate used by `projectedApr`.
+  const recentApr = calcRecentAprPct({
+    events: eventsSinceOpen,
+    capitalUsd: capital,
+    windowHours: 24,
+    nowMs: now,
+    openedAtMs: openedAt,
   });
   const totalReturnPct = calcTotalReturnPct(totalRealizedFunding, capital);
 
@@ -91,13 +107,21 @@ export default function LedgerCard({
         <div className="flex items-center gap-3 text-xs">
           <span
             className="text-hl-text-tertiary cursor-help"
-            title="실현 펀딩을 경과 시간으로 연환산한 실효 APR · 분모 = HL 노셔널 + KR 현물 원화의 USD 환산"
+            title={
+              aprReliable
+                ? "실현 펀딩을 경과 시간으로 연환산한 실효 APR · 분모 = HL 노셔널 + KR 현물 원화의 USD 환산"
+                : "24시간 · 정산 3회 이상 쌓이면 표시됩니다 (초단기 연환산은 왜곡이 큼)"
+            }
           >
             실효 APR<span className="text-hl-text-tertiary ml-0.5 text-[9px]">?</span>
           </span>
-          <span className={`font-mono font-bold ${pnlColor(realizedApr)}`}>
-            {realizedApr.toFixed(1)}%
-          </span>
+          {aprReliable ? (
+            <span className={`font-mono font-bold ${pnlColor(realizedApr)}`}>
+              {realizedApr.toFixed(1)}%
+            </span>
+          ) : (
+            <span className="font-mono font-bold text-hl-text-tertiary">집계 중…</span>
+          )}
         </div>
       </div>
 
@@ -161,12 +185,12 @@ export default function LedgerCard({
         <div>
           <div
             className="text-[10px] text-hl-text-tertiary uppercase cursor-help"
-            title="현재 펀딩률이 유지된다고 가정한 예상 APR"
+            title={`최근 24시간 펀딩 실적을 연환산한 run-rate · 현재 1h 펀딩률 기준 순간 예상치는 ${projectedApr.toFixed(1)}%`}
           >
-            예상 APR<span className="text-hl-text-tertiary/60 ml-0.5">?</span>
+            최근24h APR<span className="text-hl-text-tertiary/60 ml-0.5">?</span>
           </div>
-          <div className={`font-mono ${pnlColor(projectedApr)}`}>
-            {projectedApr.toFixed(1)}%
+          <div className={`font-mono ${pnlColor(recentApr)}`}>
+            {settlementCount > 0 ? `${recentApr.toFixed(1)}%` : "—"}
           </div>
         </div>
       </div>

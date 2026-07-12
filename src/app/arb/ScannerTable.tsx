@@ -53,22 +53,29 @@ function formatUsdShort(n: number): string {
 
 export default function ScannerTable({ snapshot }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("apr");
+  const [query, setQuery] = useState("");
+  // Off by default: for a funding-farm the funding APR is the primary signal, and
+  // a near-zero-premium name is often the *best* delta-neutral entry — hiding it
+  // by premium would bury the opportunity. Opt in when hunting kimchi-premium.
+  const [premiumOnly, setPremiumOnly] = useState(false);
 
   const rows = useMemo<Row[]>(() => {
     if (snapshot.fx.usdKrwHana == null || snapshot.fx.usdtKrwUpbit == null) return [];
+    const q = query.trim().toLowerCase();
     const map = loadTickerMap();
     const out: Row[] = [];
     for (const t of map) {
       const hl = snapshot.hl[t.hlSymbol];
       const kr = snapshot.kr[t.hlSymbol];
       if (!hl || !kr) continue;
+      if (q && !(`${t.krName} ${t.krCode} ${t.hlSymbol}`.toLowerCase().includes(q))) continue;
       const krLive = selectLiveKrPrice(kr);
       const premium = calcPremiumPct({
         hlMarkUsd: hl.markPx,
         usdtKrw: snapshot.fx.usdtKrwUpbit,
         krCloseKrw: krLive,
       });
-      if (Math.abs(premium) < HIDE_BELOW_ABS_PREMIUM_PCT) continue;
+      if (premiumOnly && Math.abs(premium) < HIDE_BELOW_ABS_PREMIUM_PCT) continue;
       const hlSizeAbs = 1;
       const krQuantity = krLive > 0 ? (hl.markPx * snapshot.fx.usdKrwHana) / krLive : 0;
       const capital = calcCapitalUsd({
@@ -111,16 +118,16 @@ export default function ScannerTable({ snapshot }: Props) {
       if (sortKey === "funding") return b.fundingHourly - a.fundingHourly;
       return b.dayNtlVlm - a.dayNtlVlm;
     });
-  }, [snapshot, sortKey]);
+  }, [snapshot, sortKey, query, premiumOnly]);
 
   return (
     <div className="space-y-4">
       <p className="text-xs text-hl-text-tertiary leading-relaxed">
-        매핑 종목 · 프리미엄 |≥ 0.05%| · APR은 현재 펀딩률 유지 가정 예상치
+        매핑 종목 · APR은 현재 펀딩률 유지 가정 예상치 (gross, 수수료·세금 제외)
       </p>
 
       <div className="flex items-center flex-wrap gap-2 text-xs bg-hl-bg-secondary border border-hl-border rounded-lg px-3 py-2">
-        <span className="text-hl-text-tertiary">Sort by</span>
+        <span className="text-hl-text-tertiary">Sort</span>
         {(["apr", "premium", "funding", "volume"] as SortKey[]).map((k) => (
           <button
             key={k}
@@ -134,6 +141,23 @@ export default function ScannerTable({ snapshot }: Props) {
             {k}
           </button>
         ))}
+        <button
+          onClick={() => setPremiumOnly((v) => !v)}
+          title="프리미엄 절대값 0.05% 이상만 표시"
+          className={`px-2.5 py-1 rounded font-mono transition-colors ${
+            premiumOnly
+              ? "bg-hl-accent/20 text-hl-accent"
+              : "text-hl-text-secondary hover:text-hl-text-primary hover:bg-hl-bg-hover"
+          }`}
+        >
+          |프리미엄|≥0.05%
+        </button>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="종목 검색"
+          className="bg-hl-bg-tertiary border border-hl-border rounded px-2 py-1 text-hl-text-primary placeholder:text-hl-text-tertiary w-28 focus:w-36 transition-all outline-none focus:border-hl-border-light"
+        />
         <span className="ml-auto text-hl-text-tertiary text-[11px]">
           {rows.length}개
         </span>
@@ -141,7 +165,11 @@ export default function ScannerTable({ snapshot }: Props) {
 
       {rows.length === 0 ? (
         <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-8 text-center text-sm text-hl-text-tertiary">
-          현재 프리미엄이 0.05% 이상인 매핑 종목이 없어요.
+          {query
+            ? `"${query}"에 해당하는 종목이 없어요.`
+            : premiumOnly
+            ? "현재 프리미엄이 0.05% 이상인 매핑 종목이 없어요."
+            : "표시할 매핑 종목이 없어요."}
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
