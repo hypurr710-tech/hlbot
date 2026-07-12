@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLiveSnapshot } from "@/app/arb/useLiveSnapshot";
 import { loadTickerMap } from "@/lib/tickerMap";
 import { calcCapitalUsd, calcAprPct, selectLiveKrPrice } from "@/lib/arb";
+import { groupDigits } from "@/lib/format";
 
 const won = (n: number) => `₩${Math.round(n).toLocaleString("ko-KR")}`;
 const usd = (n: number) =>
@@ -80,7 +81,7 @@ export default function CalculatorPage() {
             <div className="flex gap-2">
               <input
                 inputMode="numeric"
-                value={amountStr}
+                value={groupDigits(amountStr)}
                 onChange={(e) => setAmountStr(e.target.value.replace(/[^0-9.]/g, ""))}
                 className="flex-1 bg-hl-bg-tertiary border border-hl-border rounded px-3 py-2 font-mono text-hl-text-primary text-right outline-none focus:border-hl-border-light"
               />

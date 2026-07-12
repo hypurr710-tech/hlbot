@@ -19,6 +19,16 @@ export function formatNumber(value: number, decimals = 2): string {
   });
 }
 
+/** Format a raw numeric input string with thousands separators, preserving an
+ *  in-progress trailing decimal (e.g. "10000000" → "10,000,000", "1000." → "1,000."). */
+export function groupDigits(raw: string): string {
+  if (!raw) return "";
+  const [intPart, ...rest] = raw.split(".");
+  const intFmt = intPart ? Number(intPart).toLocaleString("en-US") : "";
+  const dec = rest.length ? "." + rest.join("") : "";
+  return intFmt + dec;
+}
+
 export function formatAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
