@@ -1,72 +1,32 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { useAddresses } from "@/lib/store";
+import { useMemo, useState } from "react";
 import { useArbPairs } from "@/hooks/useArbPairs";
-import { getClearinghouseState } from "@/lib/hyperliquid";
 import LedgerCard from "./LedgerCard";
 import UnhedgedList, { type UnhedgedShort } from "./UnhedgedList";
 import PairEditModal from "./PairEditModal";
 import type { LiveSnapshot } from "@/lib/aggregator/types";
 import type { ArbPair, KrLeg } from "@/lib/arbStore";
-
-interface HlPositionSnap {
-  hlAddress: string;
-  hlSymbol: string;
-  sizeAbs: number;
-  cumFundingUsd: number;
-}
-
-async function fetchHlShortsForAddress(address: string): Promise<HlPositionSnap[]> {
-  const state = await getClearinghouseState(address, "xyz");
-  const out: HlPositionSnap[] = [];
-  for (const ap of state.assetPositions ?? []) {
-    const p = ap.position;
-    const size = parseFloat(p.szi);
-    if (size >= 0) continue;
-    const rawSymbol = p.coin.includes(":") ? p.coin : `xyz:${p.coin}`;
-    out.push({
-      hlAddress: address,
-      hlSymbol: rawSymbol,
-      sizeAbs: Math.abs(size),
-      cumFundingUsd: -parseFloat(p.cumFunding.sinceOpen),
-    });
-  }
-  return out;
-}
+import type { HlShortSnap } from "./useHlXyzShorts";
 
 interface Props {
   snapshot: LiveSnapshot | null;
+  shorts: HlShortSnap[];
 }
 
-export default function LedgerPanel({ snapshot }: Props) {
-  const { addresses } = useAddresses();
+export default function LedgerPanel({ snapshot, shorts }: Props) {
   const { pairs, addPair, updatePair, closePair } = useArbPairs();
-  const [hlShorts, setHlShorts] = useState<HlPositionSnap[]>([]);
   const [modalState, setModalState] = useState<
     | { mode: "create"; short: UnhedgedShort }
     | { mode: "edit"; pair: ArbPair }
     | null
   >(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      const results = await Promise.all(
-        addresses.map((a) => fetchHlShortsForAddress(a.address).catch(() => []))
-      );
-      if (!cancelled) setHlShorts(results.flat());
-    };
-    load();
-    const interval = setInterval(load, 30000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [addresses]);
-
   const activePairs = useMemo(() => pairs.filter((p) => !p.closedAt), [pairs]);
   const pairedKeys = useMemo(
     () => new Set(activePairs.map((p) => `${p.hlAddress.toLowerCase()}|${p.hlSymbol}`)),
     [activePairs]
   );
-  const unhedged: UnhedgedShort[] = hlShorts
+  const unhedged: UnhedgedShort[] = shorts
     .filter((s) => !pairedKeys.has(`${s.hlAddress.toLowerCase()}|${s.hlSymbol}`))
     .map((s) => ({
       hlAddress: s.hlAddress,
@@ -105,7 +65,7 @@ export default function LedgerPanel({ snapshot }: Props) {
         {activePairs.map((pair) => {
           const hl = snapshot?.hl[pair.hlSymbol];
           const kr = snapshot?.kr[pair.hlSymbol];
-          const hlPos = hlShorts.find(
+          const hlPos = shorts.find(
             (s) => s.hlAddress.toLowerCase() === pair.hlAddress.toLowerCase() && s.hlSymbol === pair.hlSymbol
           );
           if (!hl || !kr || !hlPos || snapshot?.fx.usdKrwHana == null || snapshot?.fx.usdtKrwUpbit == null) {

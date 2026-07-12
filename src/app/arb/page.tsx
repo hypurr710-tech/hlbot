@@ -1,10 +1,25 @@
 "use client";
+import { useMemo } from "react";
 import { useLiveSnapshot } from "./useLiveSnapshot";
+import { useHlXyzShorts } from "./useHlXyzShorts";
 import LedgerPanel from "./LedgerPanel";
 import ScannerPanel from "./ScannerPanel";
+import SummaryStrip from "./SummaryStrip";
 
 export default function ArbPage() {
   const { snapshot, error } = useLiveSnapshot();
+  const shorts = useHlXyzShorts();
+
+  const shortsByKey = useMemo(() => {
+    const m: Record<string, { sizeAbs: number; cumFundingUsd: number }> = {};
+    for (const s of shorts) {
+      m[`${s.hlAddress.toLowerCase()}|${s.hlSymbol}`] = {
+        sizeAbs: s.sizeAbs,
+        cumFundingUsd: s.cumFundingUsd,
+      };
+    }
+    return m;
+  }, [shorts]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -30,25 +45,21 @@ export default function ArbPage() {
           Aggregator error: {error}
         </div>
       )}
-
       {snapshot && snapshot.warnings.length > 0 && (
         <div className="bg-hl-yellow/10 border border-hl-yellow/30 text-hl-yellow text-xs p-2 rounded-lg font-mono">
           Warnings: {snapshot.warnings.join(", ")}
         </div>
       )}
 
+      <SummaryStrip snapshot={snapshot} hlPositionsBySymbol={shortsByKey} />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section>
-          <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
-            My Ledger
-          </h2>
-          <LedgerPanel snapshot={snapshot} />
+          <h2 className="text-lg font-semibold text-hl-text-primary mb-4">My Ledger</h2>
+          <LedgerPanel snapshot={snapshot} shorts={shorts} />
         </section>
-
         <section>
-          <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
-            Opportunity Scanner
-          </h2>
+          <h2 className="text-lg font-semibold text-hl-text-primary mb-4">Opportunity Scanner</h2>
           <ScannerPanel snapshot={snapshot} />
         </section>
       </div>
