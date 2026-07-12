@@ -171,6 +171,30 @@ describe("arb.calcRecentAprPct", () => {
   });
 });
 
+import { calcKimchiPct, decomposePremium } from "@/lib/arb";
+
+describe("arb.calcKimchiPct", () => {
+  it("is the USDT/KRW premium over the official USD/KRW rate", () => {
+    // Upbit 1492 vs Hana 1503.4 → (1492-1503.4)/1503.4 = -0.758%
+    expect(calcKimchiPct(1492, 1503.4)).toBeCloseTo(-0.758, 2);
+  });
+  it("is positive when USDT trades above the official rate", () => {
+    expect(calcKimchiPct(1520, 1500)).toBeCloseTo(1.333, 2);
+  });
+  it("returns 0 when the official rate is 0", () => {
+    expect(calcKimchiPct(1500, 0)).toBe(0);
+  });
+});
+
+describe("arb.decomposePremium", () => {
+  it("splits app premium into stock basis + USDT kimchi (stockBasis = app - kimchi)", () => {
+    const d = decomposePremium({ hlMarkUsd: 1478.2, usdtKrw: 1492, usdKrw: 1503.4, krPriceKrw: 2186000 });
+    // app premium via calcPremiumPct, kimchi via calcKimchiPct, basis = app - kimchi
+    expect(d.stockBasis).toBeCloseTo(d.appPremium - d.kimchi, 6);
+    expect(d.kimchi).toBeCloseTo(-0.758, 2);
+  });
+});
+
 describe("arb.isAprReliable", () => {
   it("false while the sample is too short to annualize", () => {
     expect(isAprReliable(1, 1)).toBe(false);

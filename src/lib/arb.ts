@@ -57,6 +57,33 @@ export function calcAprPct(args: {
   return (perYearUsd / capitalUsd) * 100;
 }
 
+/** USDT/KRW premium ("김프") over the official USD/KRW rate, in percent. */
+export function calcKimchiPct(usdtKrw: number, usdKrw: number): number {
+  if (usdKrw <= 0) return 0;
+  return ((usdtKrw - usdKrw) / usdKrw) * 100;
+}
+
+/**
+ * Split the displayed "app premium" into its two components:
+ * - kimchi: the USDT/KRW premium, common to every symbol (FX/stablecoin noise)
+ * - stockBasis: what's left, i.e. how rich/cheap THIS perp is vs its KR spot
+ *   after neutralizing the FX premium. Defined as app − kimchi.
+ */
+export function decomposePremium(args: {
+  hlMarkUsd: number;
+  usdtKrw: number;
+  usdKrw: number;
+  krPriceKrw: number;
+}): { appPremium: number; kimchi: number; stockBasis: number } {
+  const appPremium = calcPremiumPct({
+    hlMarkUsd: args.hlMarkUsd,
+    usdtKrw: args.usdtKrw,
+    krCloseKrw: args.krPriceKrw,
+  });
+  const kimchi = calcKimchiPct(args.usdtKrw, args.usdKrw);
+  return { appPremium, kimchi, stockBasis: appPremium - kimchi };
+}
+
 export function calcDeltaMismatchPct(args: {
   hlSizeAbs: number;
   hlMarkUsd: number;
