@@ -1,6 +1,7 @@
 "use client";
 import { useLiveSnapshot } from "./useLiveSnapshot";
 import LedgerPanel from "./LedgerPanel";
+import ScannerPanel from "./ScannerPanel";
 
 export default function ArbPage() {
   const { snapshot, error } = useLiveSnapshot();
@@ -48,9 +49,7 @@ export default function ArbPage() {
           <h2 className="text-lg font-semibold text-hl-text-primary mb-4">
             Opportunity Scanner
           </h2>
-          <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-6 text-sm text-hl-text-secondary">
-            Scanner placeholder — ScannerPanel wired in Task 17.
-          </div>
+          <ScannerPanel snapshot={snapshot} />
         </section>
       </div>
     </div>
