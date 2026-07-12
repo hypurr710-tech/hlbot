@@ -76,12 +76,12 @@ export default function ArbPage() {
             </ul>
           </div>
           <div>
-            <span className="text-hl-text-secondary font-semibold">참고</span>
+            <span className="text-hl-text-secondary font-semibold">계산식</span>
             <ul className="mt-1 space-y-0.5">
-              <li>· 프리미엄 = HL 가격을 업비트 USDT/KRW로 환산한 값 vs KR 현물</li>
-              <li>· APR 분모 = HL 노셔널 (USD) + KR 현물 원화의 USD 환산 (하나은행 환율)</li>
-              <li>· 델타중립 판정 임계값 = ±3%</li>
-              <li>· 5초마다 갱신 · 데이터 근사값이므로 실주문 시 실시간 확인 필요</li>
+              <li>· 프리미엄 = (HL × USDT/KRW − KR 라이브가) / KR 라이브가</li>
+              <li>· 투입자본 = HL 노셔널 + KR 원금 (하나은행 환율 USD 환산)</li>
+              <li>· 델타중립 판정: |불일치| &lt; 3%</li>
+              <li>· 갱신 주기 5s · KR 라이브가 = 정규장 열림 시 종가필드, 마감 후 NXT</li>
             </ul>
           </div>
         </div>

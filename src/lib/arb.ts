@@ -1,3 +1,21 @@
+import type { KrQuote } from "./aggregator/types";
+
+/**
+ * Pick the KR price that best reflects "current" market:
+ * - Regular hours: kr.close is the live intraday price
+ * - After hours with NXT open: use NXT price
+ * - Otherwise: fall back to regular close
+ */
+export function selectLiveKrPrice(kr: KrQuote): number {
+  if (kr.marketOpen) return kr.close;
+  if (kr.nxtPrice != null && kr.nxtPrice > 0) return kr.nxtPrice;
+  return kr.close;
+}
+
+export function isLiveKrFromNxt(kr: KrQuote): boolean {
+  return !kr.marketOpen && kr.nxtPrice != null && kr.nxtPrice > 0;
+}
+
 export function hlPriceKrw(hlMarkUsd: number, usdtKrw: number): number {
   return hlMarkUsd * usdtKrw;
 }

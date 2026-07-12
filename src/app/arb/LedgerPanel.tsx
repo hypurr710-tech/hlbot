@@ -9,6 +9,7 @@ import PairEditModal from "./PairEditModal";
 import type { LiveSnapshot } from "@/lib/aggregator/types";
 import type { ArbPair, KrLeg } from "@/lib/arbStore";
 import type { HlShortSnap } from "./useHlXyzShorts";
+import { selectLiveKrPrice, isLiveKrFromNxt } from "@/lib/arb";
 
 interface Props {
   snapshot: LiveSnapshot | null;
@@ -63,25 +64,25 @@ export default function LedgerPanel({ snapshot, shorts }: Props) {
           {addresses.length === 0 ? (
             <>
               <div className="text-sm text-hl-text-secondary">
-                아직 지갑이 등록되어 있지 않아요.
+                등록된 지갑 없음
               </div>
               <div className="text-xs text-hl-text-tertiary">
-                Hyperliquid xyz dex에서 숏을 잡고 있는 지갑 주소를 먼저 추가해줘.
+                Hyperliquid 지갑을 등록하세요
               </div>
               <Link
                 href="/address"
                 className="inline-block px-4 py-2 bg-hl-accent text-hl-bg-primary rounded-lg text-sm font-semibold hover:bg-hl-accent/90 transition-colors"
               >
-                지갑 주소 추가하기 →
+                지갑 등록
               </Link>
             </>
           ) : (
             <>
               <div className="text-sm text-hl-text-secondary">
-                등록된 지갑에 xyz dex 숏 포지션이 없어요.
+                xyz dex 숏 포지션 없음
               </div>
               <div className="text-xs text-hl-text-tertiary">
-                Hyperliquid에서 <code className="text-hl-accent">xyz:SKHX</code> 같은 국내주식 perp을 1x 숏 잡으면 여기 표시돼.
+                Hyperliquid에서 국내주식 perp 숏을 진입하면 자동 표시됩니다
               </div>
               <a
                 href="https://app.hyperliquid.xyz/trade/xyz:SKHX"
@@ -110,6 +111,8 @@ export default function LedgerPanel({ snapshot, shorts }: Props) {
               </div>
             );
           }
+          const krLive = selectLiveKrPrice(kr);
+          const krSource: "regular" | "nxt" = isLiveKrFromNxt(kr) ? "nxt" : "regular";
           return (
             <LedgerCard
               key={pair.id}
@@ -118,11 +121,11 @@ export default function LedgerPanel({ snapshot, shorts }: Props) {
               hlMarkUsd={hl.markPx}
               fundingHourly={hl.fundingHourly}
               cumFundingUsd={hlPos.cumFundingUsd}
-              krCloseKrw={kr.close}
+              krLivePriceKrw={krLive}
+              krPriceSource={krSource}
               usdKrwHana={snapshot.fx.usdKrwHana}
               usdtKrwUpbit={snapshot.fx.usdtKrwUpbit}
               krName={pair.krLeg.krName}
-              krNxtPrice={kr.nxtPrice}
               krNxtSession={kr.nxtSession}
               onEdit={() => setModalState({ mode: "edit", pair })}
               onClose={() => closePair(pair.id)}

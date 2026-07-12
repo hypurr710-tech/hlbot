@@ -15,11 +15,11 @@ interface Props {
   hlMarkUsd: number;
   fundingHourly: number;
   cumFundingUsd: number;
-  krCloseKrw: number;
+  krLivePriceKrw: number;
+  krPriceSource: "regular" | "nxt";
   usdKrwHana: number;
   usdtKrwUpbit: number;
   krName: string;
-  krNxtPrice?: number | null;
   krNxtSession?: "PRE" | "AFTER_MARKET" | null;
   onEdit: () => void;
   onClose: () => void;
@@ -27,9 +27,9 @@ interface Props {
 
 export default function LedgerCard({
   pair, hlSizeAbs, hlMarkUsd, fundingHourly, cumFundingUsd,
-  krCloseKrw, usdKrwHana, usdtKrwUpbit, krName, krNxtPrice, krNxtSession, onEdit, onClose,
+  krLivePriceKrw, krPriceSource, usdKrwHana, usdtKrwUpbit, krName, krNxtSession, onEdit, onClose,
 }: Props) {
-  const premium = calcPremiumPct({ hlMarkUsd, usdtKrw: usdtKrwUpbit, krCloseKrw });
+  const premium = calcPremiumPct({ hlMarkUsd, usdtKrw: usdtKrwUpbit, krCloseKrw: krLivePriceKrw });
   const capital = calcCapitalUsd({
     hlSizeAbs, hlMarkUsd,
     krQuantity: pair.krLeg.quantity, krAvgPriceKrw: pair.krLeg.avgPriceKrw, usdKrwHana,
@@ -41,9 +41,10 @@ export default function LedgerCard({
   });
   const delta = calcDeltaMismatchPct({
     hlSizeAbs, hlMarkUsd,
-    krQuantity: pair.krLeg.quantity, krCloseKrw, usdKrwHana,
+    krQuantity: pair.krLeg.quantity, krCloseKrw: krLivePriceKrw, usdKrwHana,
   });
   const neutral = isDeltaNeutral(delta);
+  const isNxt = krPriceSource === "nxt";
 
   return (
     <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
@@ -95,18 +96,17 @@ export default function LedgerCard({
           <div className="text-[10px] text-hl-text-tertiary mb-1 uppercase tracking-wider">
             KR Spot
           </div>
-          <div className="font-mono text-hl-text-primary font-semibold">
-            ₩{krCloseKrw.toLocaleString("ko-KR")}
+          <div className="font-mono text-hl-text-primary font-semibold flex items-center gap-1.5">
+            <span>₩{krLivePriceKrw.toLocaleString("ko-KR")}</span>
+            {isNxt && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-hl-accent/15 text-hl-accent">
+                NXT{krNxtSession ? `·${krNxtSession}` : ""}
+              </span>
+            )}
           </div>
           <div className="text-[11px] text-hl-text-tertiary mt-1">
             Avg ₩{pair.krLeg.avgPriceKrw.toLocaleString("ko-KR")} · Qty {pair.krLeg.quantity}
           </div>
-          {krNxtPrice != null && (
-            <div className="text-[11px] text-hl-accent mt-1">
-              NXT ₩{krNxtPrice.toLocaleString("ko-KR")}
-              {krNxtSession && <span className="text-hl-text-tertiary ml-1">({krNxtSession})</span>}
-            </div>
-          )}
         </div>
       </div>
 

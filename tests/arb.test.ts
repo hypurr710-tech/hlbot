@@ -117,3 +117,28 @@ describe("arb.isDeltaNeutral", () => {
     expect(isDeltaNeutral(-5)).toBe(false);
   });
 });
+
+import { selectLiveKrPrice, isLiveKrFromNxt } from "@/lib/arb";
+
+describe("arb.selectLiveKrPrice", () => {
+  const base = { prevClose: 2000000, nxtSession: null as null | "PRE" | "AFTER_MARKET" };
+  it("returns close when market is open", () => {
+    expect(selectLiveKrPrice({ ...base, close: 2100000, nxtPrice: 2150000, marketOpen: true, nxtSession: null })).toBe(2100000);
+  });
+  it("returns nxtPrice when market is closed and NXT available", () => {
+    expect(selectLiveKrPrice({ ...base, close: 2100000, nxtPrice: 2150000, marketOpen: false, nxtSession: "AFTER_MARKET" })).toBe(2150000);
+  });
+  it("falls back to close when market is closed and no NXT price", () => {
+    expect(selectLiveKrPrice({ ...base, close: 2100000, nxtPrice: null, marketOpen: false, nxtSession: null })).toBe(2100000);
+  });
+});
+
+describe("arb.isLiveKrFromNxt", () => {
+  const base = { close: 2100000, prevClose: 2000000 };
+  it("true when market closed and NXT price present", () => {
+    expect(isLiveKrFromNxt({ ...base, nxtPrice: 2150000, marketOpen: false, nxtSession: "AFTER_MARKET" })).toBe(true);
+  });
+  it("false when market open", () => {
+    expect(isLiveKrFromNxt({ ...base, nxtPrice: 2150000, marketOpen: true, nxtSession: null })).toBe(false);
+  });
+});

@@ -2,7 +2,14 @@
 import { useMemo, useState } from "react";
 import type { LiveSnapshot } from "@/lib/aggregator/types";
 import { loadTickerMap } from "@/lib/tickerMap";
-import { calcPremiumPct, calcAprPct, calcCapitalUsd, hlPriceKrw } from "@/lib/arb";
+import {
+  calcPremiumPct,
+  calcAprPct,
+  calcCapitalUsd,
+  hlPriceKrw,
+  selectLiveKrPrice,
+  isLiveKrFromNxt,
+} from "@/lib/arb";
 import { pnlColor } from "@/lib/format";
 
 type SortKey = "apr" | "premium" | "funding" | "volume";
@@ -21,6 +28,7 @@ interface Row {
   krNxtPrice: number | null;
   krNxtSession: "PRE" | "AFTER_MARKET" | null;
   krMarketOpen: boolean;
+  krPriceSource: "regular" | "nxt";
   hlPriceInKrw: number;
   premiumPct: number;
   aprPct: number;
@@ -54,19 +62,20 @@ export default function ScannerTable({ snapshot }: Props) {
       const hl = snapshot.hl[t.hlSymbol];
       const kr = snapshot.kr[t.hlSymbol];
       if (!hl || !kr) continue;
+      const krLive = selectLiveKrPrice(kr);
       const premium = calcPremiumPct({
         hlMarkUsd: hl.markPx,
         usdtKrw: snapshot.fx.usdtKrwUpbit,
-        krCloseKrw: kr.close,
+        krCloseKrw: krLive,
       });
       if (Math.abs(premium) < HIDE_BELOW_ABS_PREMIUM_PCT) continue;
       const hlSizeAbs = 1;
-      const krQuantity = (hl.markPx * snapshot.fx.usdKrwHana) / kr.close;
+      const krQuantity = krLive > 0 ? (hl.markPx * snapshot.fx.usdKrwHana) / krLive : 0;
       const capital = calcCapitalUsd({
         hlSizeAbs,
         hlMarkUsd: hl.markPx,
         krQuantity,
-        krAvgPriceKrw: kr.close,
+        krAvgPriceKrw: krLive,
         usdKrwHana: snapshot.fx.usdKrwHana,
       });
       const apr = calcAprPct({
@@ -84,11 +93,12 @@ export default function ScannerTable({ snapshot }: Props) {
         fundingHourly: hl.fundingHourly,
         openInterest: hl.openInterest,
         dayNtlVlm: hl.dayNtlVlm,
-        krClose: kr.close,
+        krClose: krLive,
         krPrevClose: kr.prevClose,
         krNxtPrice: kr.nxtPrice,
         krNxtSession: kr.nxtSession,
         krMarketOpen: kr.marketOpen,
+        krPriceSource: isLiveKrFromNxt(kr) ? "nxt" : "regular",
         hlPriceInKrw: hlPriceKrw(hl.markPx, snapshot.fx.usdtKrwUpbit),
         premiumPct: premium,
         aprPct: apr,
@@ -105,6 +115,10 @@ export default function ScannerTable({ snapshot }: Props) {
 
   return (
     <div className="space-y-4">
+      <p className="text-xs text-hl-text-tertiary leading-relaxed">
+        매핑 종목 · 프리미엄 |≥ 0.05%| · APR은 현재 펀딩률 유지 가정 예상치
+      </p>
+
       <div className="flex items-center flex-wrap gap-2 text-xs bg-hl-bg-secondary border border-hl-border rounded-lg px-3 py-2">
         <span className="text-hl-text-tertiary">Sort by</span>
         {(["apr", "premium", "funding", "volume"] as SortKey[]).map((k) => (
@@ -121,7 +135,7 @@ export default function ScannerTable({ snapshot }: Props) {
           </button>
         ))}
         <span className="ml-auto text-hl-text-tertiary text-[11px]">
-          매핑 종목 {rows.length}개 · 프리미엄 절대값 ≥ 0.05%
+          {rows.length}개
         </span>
       </div>
 
@@ -190,9 +204,13 @@ function OpportunityCard({ row: r }: { row: Row }) {
       <div className="grid grid-cols-2 divide-x divide-hl-border border-b border-hl-border">
         <div className="px-5 py-3">
           <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider mb-1">
-            한국장 종가 <span className="text-hl-text-tertiary/60">(NAVER)</span>
+            {r.krPriceSource === "nxt" ? (
+              <>NXT 현재가 <span className="text-hl-text-tertiary/60">(NAVER)</span></>
+            ) : (
+              <>한국장 종가 <span className="text-hl-text-tertiary/60">(NAVER)</span></>
+            )}
           </div>
-          <div className="text-base font-semibold font-mono text-hl-text-primary tabular-nums">
+          <div className={`text-base font-semibold font-mono tabular-nums ${r.krPriceSource === "nxt" ? "text-hl-accent" : "text-hl-text-primary"}`}>
             {formatKrw(r.krClose)}
           </div>
           <div className={`text-[11px] font-mono ${pnlColor(dayChangePct)}`}>
@@ -215,20 +233,36 @@ function OpportunityCard({ row: r }: { row: Row }) {
 
       <div className="grid grid-cols-2 divide-x divide-hl-border border-b border-hl-border">
         <div className="px-5 py-3">
-          <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider mb-1">
-            시간외 (NXT)
-          </div>
-          {r.krNxtPrice != null ? (
+          {r.krPriceSource === "nxt" ? (
             <>
-              <div className="text-base font-semibold font-mono text-hl-accent tabular-nums">
-                {formatKrw(r.krNxtPrice)}
+              <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider mb-1">
+                정규장 종가 <span className="text-hl-text-tertiary/60">(기준일)</span>
+              </div>
+              <div className="text-base font-semibold font-mono text-hl-text-primary tabular-nums">
+                {formatKrw(r.krPrevClose > 0 ? r.krPrevClose : r.krClose)}
               </div>
               <div className="text-[11px] font-mono text-hl-text-tertiary">
-                {r.krNxtSession ?? "—"}
+                stale
               </div>
             </>
           ) : (
-            <div className="text-sm text-hl-text-tertiary font-mono">—</div>
+            <>
+              <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider mb-1">
+                시간외 (NXT)
+              </div>
+              {r.krNxtPrice != null ? (
+                <>
+                  <div className="text-base font-semibold font-mono text-hl-accent tabular-nums">
+                    {formatKrw(r.krNxtPrice)}
+                  </div>
+                  <div className="text-[11px] font-mono text-hl-text-tertiary">
+                    {r.krNxtSession ?? "—"}
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-hl-text-tertiary font-mono">—</div>
+              )}
+            </>
           )}
         </div>
         <div className="px-5 py-3">
