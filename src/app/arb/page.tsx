@@ -125,20 +125,27 @@ export default function ArbPage() {
         pairRealizedFunding={pairRealizedFunding}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section>
-          <h2 className="text-lg font-semibold text-hl-text-primary mb-4">My Ledger</h2>
-          <LedgerPanel
-            snapshot={snapshot}
-            shorts={shorts}
-            fundingByAddress={fundingByAddress}
-          />
-        </section>
-        <section>
-          <h2 className="text-lg font-semibold text-hl-text-primary mb-4">Opportunity Scanner</h2>
-          <ScannerPanel snapshot={snapshot} />
-        </section>
-      </div>
+      <section>
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-xl md:text-2xl font-semibold text-hl-text-primary">
+            Opportunity Scanner
+          </h2>
+          <span className="text-xs text-hl-text-tertiary">델타중립 진입 후보 · 펀딩 파밍</span>
+        </div>
+        <ScannerPanel snapshot={snapshot} />
+      </section>
+
+      <section className="pt-2">
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-xl md:text-2xl font-semibold text-hl-text-primary">My Ledger</h2>
+          <span className="text-xs text-hl-text-tertiary">보유 델타중립 포지션</span>
+        </div>
+        <LedgerPanel
+          snapshot={snapshot}
+          shorts={shorts}
+          fundingByAddress={fundingByAddress}
+        />
+      </section>
 
       <footer className="pt-8 mt-8 border-t border-hl-border text-[11px] text-hl-text-tertiary font-mono leading-relaxed">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

@@ -172,7 +172,7 @@ export default function ScannerTable({ snapshot }: Props) {
             : "표시할 매핑 종목이 없어요."}
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
           {rows.map((r) => (
             <OpportunityCard key={r.hlSymbol} row={r} />
           ))}
@@ -191,7 +191,7 @@ function OpportunityCard({ row: r }: { row: Row }) {
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 bg-hl-bg-tertiary border-b border-hl-border">
         <div className="flex items-baseline gap-2">
-          <span className="text-lg font-bold text-hl-text-primary">{r.krName}</span>
+          <span className="text-xl font-bold text-hl-text-primary">{r.krName}</span>
           <span className="text-xs font-mono text-hl-text-tertiary">
             {r.hlSymbol} · {r.krCode}
           </span>
@@ -212,7 +212,7 @@ function OpportunityCard({ row: r }: { row: Row }) {
           <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider mb-1">
             HL Perp (김프 ON, USDT/KRW 환산)
           </div>
-          <div className="text-2xl font-bold font-mono text-hl-text-primary tabular-nums">
+          <div className="text-3xl font-bold font-mono text-hl-text-primary tabular-nums">
             {formatKrw(Math.round(r.hlPriceInKrw))}
           </div>
           <div className="text-xs text-hl-text-tertiary font-mono mt-0.5">
@@ -221,7 +221,7 @@ function OpportunityCard({ row: r }: { row: Row }) {
         </div>
         <div className={`px-3 py-2 rounded-lg border ${premiumBg} text-right`}>
           <div className="text-[10px] uppercase tracking-wider opacity-80">Premium</div>
-          <div className="text-xl font-bold font-mono tabular-nums">
+          <div className="text-2xl font-bold font-mono tabular-nums">
             {r.premiumPct >= 0 ? "+" : ""}
             {r.premiumPct.toFixed(2)}%
           </div>
@@ -316,7 +316,7 @@ function OpportunityCard({ row: r }: { row: Row }) {
             >
               APR <span className="text-hl-text-tertiary/60">?</span>
             </div>
-            <div className={`text-lg font-bold font-mono tabular-nums ${pnlColor(r.aprPct)}`}>
+            <div className={`text-2xl font-bold font-mono tabular-nums ${pnlColor(r.aprPct)}`}>
               {r.aprPct.toFixed(1)}%
             </div>
           </div>
