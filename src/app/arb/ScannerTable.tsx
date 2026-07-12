@@ -172,7 +172,7 @@ export default function ScannerTable({ snapshot }: Props) {
             : "표시할 매핑 종목이 없어요."}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {rows.map((r) => (
             <OpportunityCard key={r.hlSymbol} row={r} />
           ))}
@@ -185,6 +185,14 @@ export default function ScannerTable({ snapshot }: Props) {
 function OpportunityCard({ row: r }: { row: Row }) {
   const dayChangePct = r.krPrevClose > 0 ? ((r.krClose - r.krPrevClose) / r.krPrevClose) * 100 : 0;
   const premiumBg = r.premiumPct >= 0 ? "bg-hl-green/10 border-hl-green/30 text-hl-green" : "bg-hl-red/10 border-hl-red/30 text-hl-red";
+
+  // Quick simulator: N shares hedged delta-neutral (short N HL units + long N KR
+  // shares). Funding is earned on the short leg, so income scales linearly with N.
+  const [qty, setQty] = useState(10);
+  const n = Number.isFinite(qty) && qty > 0 ? qty : 0;
+  const simMonthlyUsd = n * r.projected24hFundingUsd * 30;
+  const simYearlyUsd = n * r.projected24hFundingUsd * 365;
+  const simNotionalKrw = n * r.hlPriceInKrw;
 
   return (
     <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
@@ -209,13 +217,13 @@ function OpportunityCard({ row: r }: { row: Row }) {
       {/* Big price row */}
       <div className="px-5 py-4 flex items-end justify-between border-b border-hl-border">
         <div>
-          <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider mb-1">
+          <div className="text-[11px] text-hl-text-tertiary uppercase tracking-wider mb-1">
             HL Perp (김프 ON, USDT/KRW 환산)
           </div>
           <div className="text-3xl font-bold font-mono text-hl-text-primary tabular-nums">
             {formatKrw(Math.round(r.hlPriceInKrw))}
           </div>
-          <div className="text-xs text-hl-text-tertiary font-mono mt-0.5">
+          <div className="text-sm text-hl-text-tertiary font-mono mt-0.5">
             ≈ ${r.hlMarkUsd.toFixed(2)} USD
           </div>
         </div>
@@ -231,29 +239,29 @@ function OpportunityCard({ row: r }: { row: Row }) {
       {/* Stat grid */}
       <div className="grid grid-cols-2 divide-x divide-hl-border border-b border-hl-border">
         <div className="px-5 py-3">
-          <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider mb-1">
+          <div className="text-[11px] text-hl-text-tertiary uppercase tracking-wider mb-1">
             {r.krPriceSource === "nxt" ? (
               <>NXT 현재가 <span className="text-hl-text-tertiary/60">(NAVER)</span></>
             ) : (
               <>한국장 종가 <span className="text-hl-text-tertiary/60">(NAVER)</span></>
             )}
           </div>
-          <div className={`text-base font-semibold font-mono tabular-nums ${r.krPriceSource === "nxt" ? "text-hl-accent" : "text-hl-text-primary"}`}>
+          <div className={`text-lg font-semibold font-mono tabular-nums ${r.krPriceSource === "nxt" ? "text-hl-accent" : "text-hl-text-primary"}`}>
             {formatKrw(r.krClose)}
           </div>
-          <div className={`text-[11px] font-mono ${pnlColor(dayChangePct)}`}>
+          <div className={`text-xs font-mono ${pnlColor(dayChangePct)}`}>
             {dayChangePct >= 0 ? "+" : ""}
             {dayChangePct.toFixed(2)}% 전일比
           </div>
         </div>
         <div className="px-5 py-3">
-          <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider mb-1">
+          <div className="text-[11px] text-hl-text-tertiary uppercase tracking-wider mb-1">
             24h 거래대금 <span className="text-hl-text-tertiary/60">(HL)</span>
           </div>
-          <div className="text-base font-semibold font-mono text-hl-text-primary tabular-nums">
+          <div className="text-lg font-semibold font-mono text-hl-text-primary tabular-nums">
             {formatUsdShort(r.dayNtlVlm)}
           </div>
-          <div className="text-[11px] font-mono text-hl-text-tertiary">
+          <div className="text-xs font-mono text-hl-text-tertiary">
             OI {r.openInterest.toLocaleString("en-US", { maximumFractionDigits: 0 })}
           </div>
         </div>
@@ -263,27 +271,27 @@ function OpportunityCard({ row: r }: { row: Row }) {
         <div className="px-5 py-3">
           {r.krPriceSource === "nxt" ? (
             <>
-              <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider mb-1">
+              <div className="text-[11px] text-hl-text-tertiary uppercase tracking-wider mb-1">
                 정규장 종가 <span className="text-hl-text-tertiary/60">(기준일)</span>
               </div>
-              <div className="text-base font-semibold font-mono text-hl-text-primary tabular-nums">
+              <div className="text-lg font-semibold font-mono text-hl-text-primary tabular-nums">
                 {formatKrw(r.krPrevClose > 0 ? r.krPrevClose : r.krClose)}
               </div>
-              <div className="text-[11px] font-mono text-hl-text-tertiary">
+              <div className="text-xs font-mono text-hl-text-tertiary">
                 stale
               </div>
             </>
           ) : (
             <>
-              <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider mb-1">
+              <div className="text-[11px] text-hl-text-tertiary uppercase tracking-wider mb-1">
                 시간외 (NXT)
               </div>
               {r.krNxtPrice != null ? (
                 <>
-                  <div className="text-base font-semibold font-mono text-hl-accent tabular-nums">
+                  <div className="text-lg font-semibold font-mono text-hl-accent tabular-nums">
                     {formatKrw(r.krNxtPrice)}
                   </div>
-                  <div className="text-[11px] font-mono text-hl-text-tertiary">
+                  <div className="text-xs font-mono text-hl-text-tertiary">
                     {r.krNxtSession ?? "—"}
                   </div>
                 </>
@@ -294,13 +302,13 @@ function OpportunityCard({ row: r }: { row: Row }) {
           )}
         </div>
         <div className="px-5 py-3">
-          <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider mb-1">
+          <div className="text-[11px] text-hl-text-tertiary uppercase tracking-wider mb-1">
             펀딩비 (1h)
           </div>
-          <div className={`text-base font-semibold font-mono tabular-nums ${pnlColor(r.fundingHourly)}`}>
+          <div className={`text-lg font-semibold font-mono tabular-nums ${pnlColor(r.fundingHourly)}`}>
             {(r.fundingHourly * 100).toFixed(4)}%
           </div>
-          <div className="text-[11px] font-mono text-hl-text-tertiary">
+          <div className="text-xs font-mono text-hl-text-tertiary">
             24h {(r.fundingHourly * 24 * 100).toFixed(3)}%
           </div>
         </div>
@@ -311,7 +319,7 @@ function OpportunityCard({ row: r }: { row: Row }) {
         <div className="flex items-center gap-6">
           <div>
             <div
-              className="text-[10px] text-hl-text-tertiary uppercase tracking-wider cursor-help"
+              className="text-[11px] text-hl-text-tertiary uppercase tracking-wider cursor-help"
               title="현재 펀딩률이 유지된다고 가정한 연 수익률 · 분모 = HL 노셔널 + KR 현물 원화의 USD 환산"
             >
               APR <span className="text-hl-text-tertiary/60">?</span>
@@ -321,17 +329,54 @@ function OpportunityCard({ row: r }: { row: Row }) {
             </div>
           </div>
           <div>
-            <div className="text-[10px] text-hl-text-tertiary uppercase tracking-wider">
-              24h 예상 펀딩
+            <div
+              className="text-[11px] text-hl-text-tertiary uppercase tracking-wider cursor-help"
+              title="1주(=HL 1 unit) 숏을 현재 펀딩률로 24시간 보유했을 때 받는 펀딩 = 현재가 × 시간당 펀딩률 × 24"
+            >
+              24h 예상 펀딩 <span className="text-hl-text-tertiary/60 normal-case">/ 1주</span>
             </div>
-            <div className={`text-sm font-mono tabular-nums ${pnlColor(r.projected24hFundingUsd)}`}>
+            <div className={`text-base font-mono tabular-nums ${pnlColor(r.projected24hFundingUsd)}`}>
               {r.projected24hFundingUsd >= 0 ? "+" : ""}${r.projected24hFundingUsd.toFixed(2)}
-              <span className="text-hl-text-tertiary ml-1 text-[10px]">/HL unit</span>
             </div>
           </div>
         </div>
         <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${r.krMarketOpen ? "bg-hl-green/15 text-hl-green" : "bg-hl-yellow/15 text-hl-yellow"}`}>
           {r.krMarketOpen ? "KR OPEN" : "KR CLOSED"}
+        </div>
+      </div>
+
+      {/* Simulator: pick a share count, see expected funding income at the current rate */}
+      <div className="px-5 py-3 border-t border-hl-border bg-hl-bg-tertiary/40 flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 text-sm text-hl-text-secondary">
+          <span className="text-hl-text-tertiary text-xs uppercase tracking-wider">시뮬</span>
+          <input
+            type="number"
+            min={1}
+            value={qty}
+            onChange={(e) => setQty(parseInt(e.target.value, 10))}
+            className="w-16 bg-hl-bg-tertiary border border-hl-border rounded px-2 py-1 font-mono text-hl-text-primary text-right outline-none focus:border-hl-border-light"
+          />
+          <span>주 델타중립 진입 시</span>
+        </div>
+        <div className="ml-auto flex items-center gap-4 font-mono tabular-nums">
+          <div className="text-right">
+            <div className="text-[10px] text-hl-text-tertiary uppercase">월 예상</div>
+            <div className={`text-base font-bold ${pnlColor(simMonthlyUsd)}`}>
+              {simMonthlyUsd >= 0 ? "+" : ""}${simMonthlyUsd.toFixed(0)}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] text-hl-text-tertiary uppercase">연 예상</div>
+            <div className={`text-base font-bold ${pnlColor(simYearlyUsd)}`}>
+              {simYearlyUsd >= 0 ? "+" : ""}${simYearlyUsd.toFixed(0)}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] text-hl-text-tertiary uppercase">포지션</div>
+            <div className="text-base font-semibold text-hl-text-secondary">
+              {formatKrw(Math.round(simNotionalKrw))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
