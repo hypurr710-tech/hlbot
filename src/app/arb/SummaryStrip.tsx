@@ -89,7 +89,11 @@ export default function SummaryStrip({ snapshot, hlPositionsBySymbol, pairRealiz
       <StatCard
         title="USDT 김프"
         value={usdtPrem != null ? `${usdtPrem >= 0 ? "+" : ""}${usdtPrem.toFixed(2)}%` : "—"}
-        subtitle="Upbit vs 하나은행"
+        subtitle={
+          snapshot?.fx.usdtKrwUpbit != null && snapshot?.fx.usdKrwHana != null
+            ? `Upbit ₩${snapshot.fx.usdtKrwUpbit.toLocaleString("ko-KR")} · 하나 ₩${snapshot.fx.usdKrwHana.toLocaleString("ko-KR")}`
+            : "Upbit vs 하나은행"
+        }
         loading={!snapshot}
       />
     </div>

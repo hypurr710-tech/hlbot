@@ -33,6 +33,7 @@ interface Row {
   premiumPct: number;
   aprPct: number;
   projected24hFundingUsd: number;
+  usdKrwHana: number;
 }
 
 interface Props { snapshot: LiveSnapshot }
@@ -110,6 +111,7 @@ export default function ScannerTable({ snapshot }: Props) {
         premiumPct: premium,
         aprPct: apr,
         projected24hFundingUsd: projected24h,
+        usdKrwHana: snapshot.fx.usdKrwHana,
       });
     }
     return out.sort((a, b) => {
@@ -194,7 +196,11 @@ function OpportunityCard({ row: r }: { row: Row }) {
   const n = Math.max(0, parseInt(qtyStr, 10) || 0);
   const simMonthlyUsd = n * r.projected24hFundingUsd * 30;
   const simYearlyUsd = n * r.projected24hFundingUsd * 365;
-  const simNotionalKrw = n * r.hlPriceInKrw;
+  // Capital required per leg to run the pair delta-neutral:
+  const simHlUsd = n * r.hlMarkUsd;                                // HL short notional (1x margin), USD
+  const simKrKrw = n * r.krClose;                                  // KR spot purchase (cash), KRW
+  const simKrUsd = r.usdKrwHana > 0 ? simKrKrw / r.usdKrwHana : 0;
+  const simTotalUsd = simHlUsd + simKrUsd;
 
   return (
     <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
@@ -347,52 +353,73 @@ function OpportunityCard({ row: r }: { row: Row }) {
         </div>
       </div>
 
-      {/* Simulator: pick a share count, see expected funding income at the current rate */}
-      <div className="px-5 py-3 border-t border-hl-border bg-hl-bg-tertiary/40 flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5 text-sm text-hl-text-secondary">
-          <span className="text-hl-text-tertiary text-xs uppercase tracking-wider">시뮬</span>
-          <div className="flex items-center">
-            <button
-              type="button"
-              onClick={() => setQtyStr(String(Math.max(1, n - 1)))}
-              className="w-7 h-8 flex items-center justify-center rounded-l border border-hl-border bg-hl-bg-tertiary text-hl-text-secondary hover:bg-hl-bg-hover hover:text-hl-text-primary transition-colors"
-            >
-              −
-            </button>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={qtyStr}
-              onChange={(e) => setQtyStr(e.target.value.replace(/[^0-9]/g, ""))}
-              className="w-12 h-8 bg-hl-bg-tertiary border-y border-hl-border font-mono text-hl-text-primary text-center outline-none focus:bg-hl-bg-hover"
-            />
-            <button
-              type="button"
-              onClick={() => setQtyStr(String(n + 1))}
-              className="w-7 h-8 flex items-center justify-center rounded-r border border-hl-border bg-hl-bg-tertiary text-hl-text-secondary hover:bg-hl-bg-hover hover:text-hl-text-primary transition-colors"
-            >
-              +
-            </button>
+      {/* Simulator: pick a share count, see expected funding income + capital needed per leg */}
+      <div className="px-5 py-3 border-t border-hl-border bg-hl-bg-tertiary/40 space-y-2.5">
+        {/* Row 1 — input + expected income */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 text-sm text-hl-text-secondary">
+            <span className="text-hl-text-tertiary text-xs uppercase tracking-wider">시뮬</span>
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setQtyStr(String(Math.max(1, n - 1)))}
+                className="w-7 h-8 flex items-center justify-center rounded-l border border-hl-border bg-hl-bg-tertiary text-hl-text-secondary hover:bg-hl-bg-hover hover:text-hl-text-primary transition-colors"
+              >
+                −
+              </button>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={qtyStr}
+                onChange={(e) => setQtyStr(e.target.value.replace(/[^0-9]/g, ""))}
+                className="w-12 h-8 bg-hl-bg-tertiary border-y border-hl-border font-mono text-hl-text-primary text-center outline-none focus:bg-hl-bg-hover"
+              />
+              <button
+                type="button"
+                onClick={() => setQtyStr(String(n + 1))}
+                className="w-7 h-8 flex items-center justify-center rounded-r border border-hl-border bg-hl-bg-tertiary text-hl-text-secondary hover:bg-hl-bg-hover hover:text-hl-text-primary transition-colors"
+              >
+                +
+              </button>
+            </div>
+            <span>주 델타중립 진입 시</span>
           </div>
-          <span>주 델타중립 진입 시</span>
+          <div className="ml-auto flex items-center gap-4 font-mono tabular-nums">
+            <div className="text-right">
+              <div className="text-[10px] text-hl-text-tertiary uppercase">월 예상 펀딩</div>
+              <div className={`text-base font-bold ${pnlColor(simMonthlyUsd)}`}>
+                {simMonthlyUsd >= 0 ? "+" : ""}${simMonthlyUsd.toFixed(0)}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] text-hl-text-tertiary uppercase">연 예상 펀딩</div>
+              <div className={`text-base font-bold ${pnlColor(simYearlyUsd)}`}>
+                {simYearlyUsd >= 0 ? "+" : ""}${simYearlyUsd.toFixed(0)}
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-4 font-mono tabular-nums">
-          <div className="text-right">
-            <div className="text-[10px] text-hl-text-tertiary uppercase">월 예상</div>
-            <div className={`text-base font-bold ${pnlColor(simMonthlyUsd)}`}>
-              {simMonthlyUsd >= 0 ? "+" : ""}${simMonthlyUsd.toFixed(0)}
+
+        {/* Row 2 — capital required on each side */}
+        <div className="flex items-center gap-3 flex-wrap border-t border-hl-border/50 pt-2 text-xs">
+          <span className="text-hl-text-tertiary uppercase tracking-wider">필요 자본</span>
+          <span className="text-hl-text-tertiary/70">{n}주 기준</span>
+          <div className="ml-auto flex items-center gap-4 font-mono tabular-nums">
+            <div className="text-right">
+              <div className="text-[10px] text-hl-text-tertiary uppercase">
+                하이퍼리퀴드 <span className="text-hl-text-tertiary/60">숏 · 1x</span>
+              </div>
+              <div className="text-sm font-bold text-hl-text-primary">${simHlUsd.toFixed(0)}</div>
             </div>
-          </div>
-          <div className="text-right">
-            <div className="text-[10px] text-hl-text-tertiary uppercase">연 예상</div>
-            <div className={`text-base font-bold ${pnlColor(simYearlyUsd)}`}>
-              {simYearlyUsd >= 0 ? "+" : ""}${simYearlyUsd.toFixed(0)}
+            <div className="text-right">
+              <div className="text-[10px] text-hl-text-tertiary uppercase">
+                증권사 <span className="text-hl-text-tertiary/60">현물</span>
+              </div>
+              <div className="text-sm font-bold text-hl-text-primary">{formatKrw(Math.round(simKrKrw))}</div>
             </div>
-          </div>
-          <div className="text-right">
-            <div className="text-[10px] text-hl-text-tertiary uppercase">포지션</div>
-            <div className="text-base font-semibold text-hl-text-secondary">
-              {formatKrw(Math.round(simNotionalKrw))}
+            <div className="text-right">
+              <div className="text-[10px] text-hl-text-tertiary uppercase">합계</div>
+              <div className="text-sm font-bold text-hl-text-secondary">≈ ${simTotalUsd.toFixed(0)}</div>
             </div>
           </div>
         </div>
