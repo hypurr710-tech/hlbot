@@ -64,7 +64,12 @@ export default function LedgerCard({
           </span>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          <span className="text-hl-text-tertiary">APR</span>
+          <span
+            className="text-hl-text-tertiary cursor-help"
+            title="현재 펀딩비가 유지된다고 가정한 연 수익률 · 분모 = HL 노셔널 + KR 현물 원화의 USD 환산"
+          >
+            APR<span className="text-hl-text-tertiary ml-0.5 text-[9px]">?</span>
+          </span>
           <span className={`font-mono font-bold ${pnlColor(apr)}`}>
             {apr.toFixed(1)}%
           </span>

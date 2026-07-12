@@ -65,6 +65,11 @@ export default function ScannerTable({ snapshot }: Props) {
 
   return (
     <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-hl-border">
+        <p className="text-xs text-hl-text-tertiary leading-relaxed">
+          매핑된 종목 중 프리미엄 절대값 ≥ 0.1% 인 것만 표시. APR = 현재 시간당 펀딩률 × 24 × 365 / (HL 노셔널 + KR 현물 원화의 USD 환산).
+        </p>
+      </div>
       <div className="flex items-center gap-2 p-3 border-b border-hl-border text-xs">
         <span className="text-hl-text-tertiary">Sort by</span>
         {(["apr", "premium", "funding"] as SortKey[]).map((k) => (
@@ -81,15 +86,19 @@ export default function ScannerTable({ snapshot }: Props) {
           </button>
         ))}
       </div>
-      <table className="w-full text-sm">
+      <table className="w-full text-[13px]">
         <thead>
-          <tr className="text-[10px] text-hl-text-tertiary uppercase tracking-wider">
-            <th className="px-3 py-2 text-left">Pair</th>
-            <th className="px-3 py-2 text-right">Mark</th>
-            <th className="px-3 py-2 text-right">Spot</th>
-            <th className="px-3 py-2 text-right">Prem</th>
-            <th className="px-3 py-2 text-right">APR</th>
-            <th className="px-3 py-2 text-right">24h Fund</th>
+          <tr className="text-[11px] text-hl-text-tertiary uppercase tracking-wider">
+            <th className="px-4 py-3 text-left">Pair</th>
+            <th className="px-4 py-3 text-right">Mark</th>
+            <th className="px-4 py-3 text-right">Spot</th>
+            <th className="px-4 py-3 text-right">Prem</th>
+            <th className="px-4 py-3 text-right">
+              <span title="현재 펀딩비가 유지된다고 가정한 연 수익률 (분모=HL 마진 + KR 현물 원화의 USD 환산)">
+                APR<span className="text-hl-text-tertiary ml-0.5">?</span>
+              </span>
+            </th>
+            <th className="px-4 py-3 text-right">24h Fund</th>
           </tr>
         </thead>
         <tbody>
@@ -99,21 +108,21 @@ export default function ScannerTable({ snapshot }: Props) {
             </td></tr>
           ) : rows.map((r) => (
             <tr key={r.hlSymbol} className="border-t border-hl-border/50 hover:bg-hl-bg-hover/50">
-              <td className="px-3 py-2">
+              <td className="px-4 py-3">
                 <div className="font-semibold text-hl-text-primary">{r.hlSymbol.replace("xyz:", "")}</div>
                 <div className="text-[10px] text-hl-text-tertiary">{r.krName}</div>
               </td>
-              <td className="px-3 py-2 text-right font-mono text-hl-text-primary">${r.markPx.toFixed(2)}</td>
-              <td className="px-3 py-2 text-right font-mono text-hl-text-primary">
-                ₩{Math.round(r.krCloseKrw / 1000)}k
+              <td className="px-4 py-3 text-right font-mono text-hl-text-primary">${r.markPx.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right font-mono text-hl-text-primary text-sm">
+                ₩{r.krCloseKrw.toLocaleString("ko-KR")}
               </td>
-              <td className={`px-3 py-2 text-right font-mono ${pnlColor(r.premiumPct)}`}>
+              <td className={`px-4 py-3 text-right font-mono ${pnlColor(r.premiumPct)}`}>
                 {r.premiumPct >= 0 ? "+" : ""}{r.premiumPct.toFixed(2)}%
               </td>
-              <td className={`px-3 py-2 text-right font-mono font-bold ${pnlColor(r.aprPct)}`}>
+              <td className={`px-4 py-3 text-right font-mono font-bold ${pnlColor(r.aprPct)}`}>
                 {r.aprPct.toFixed(1)}%
               </td>
-              <td className={`px-3 py-2 text-right font-mono ${pnlColor(r.fundingHourly)}`}>
+              <td className={`px-4 py-3 text-right font-mono ${pnlColor(r.fundingHourly)}`}>
                 {(r.fundingHourly * 24 * 100).toFixed(3)}%
               </td>
             </tr>
