@@ -2,24 +2,27 @@
 import { useMemo } from "react";
 import { useArbPairs } from "@/hooks/useArbPairs";
 import type { LiveSnapshot } from "@/lib/aggregator/types";
-import { calcCapitalUsd, calcAprPct } from "@/lib/arb";
+import { calcCapitalUsd, calcRealizedAprPct, calcAprPct } from "@/lib/arb";
 import { formatUsd } from "@/lib/format";
 import StatCard from "@/components/StatCard";
 
 interface Props {
   snapshot: LiveSnapshot | null;
   hlPositionsBySymbol: Record<string, { sizeAbs: number; cumFundingUsd: number }>;
+  /** keyed by pair id → per-pair realized totals from userFunding events */
+  pairRealizedFunding: Record<string, { totalFundingUsd: number; elapsedHours: number }>;
 }
 
-export default function SummaryStrip({ snapshot, hlPositionsBySymbol }: Props) {
+export default function SummaryStrip({ snapshot, hlPositionsBySymbol, pairRealizedFunding }: Props) {
   const { pairs } = useArbPairs();
 
   const totals = useMemo(() => {
     if (!snapshot || snapshot.fx.usdKrwHana == null) {
-      return { totalCapital: 0, blendedApr: 0, totalFunding: 0 };
+      return { totalCapital: 0, blendedRealizedApr: 0, blendedProjectedApr: 0, totalFunding: 0 };
     }
     let totalCapital = 0;
-    let weightedApr = 0;
+    let weightedRealizedApr = 0;
+    let weightedProjectedApr = 0;
     let totalFunding = 0;
     for (const p of pairs) {
       if (p.closedAt) continue;
@@ -34,21 +37,29 @@ export default function SummaryStrip({ snapshot, hlPositionsBySymbol }: Props) {
         krAvgPriceKrw: p.krLeg.avgPriceKrw,
         usdKrwHana: snapshot.fx.usdKrwHana!,
       });
-      const apr = calcAprPct({
+      const realized = pairRealizedFunding[p.id] ?? { totalFundingUsd: 0, elapsedHours: 0 };
+      const realizedApr = calcRealizedAprPct({
+        totalFundingUsd: realized.totalFundingUsd,
+        capitalUsd: capital,
+        elapsedHours: realized.elapsedHours,
+      });
+      const projectedApr = calcAprPct({
         hlNotionalUsd: pos.sizeAbs * hl.markPx,
         fundingHourly: hl.fundingHourly,
         capitalUsd: capital,
       });
       totalCapital += capital;
-      weightedApr += apr * capital;
-      totalFunding += pos.cumFundingUsd;
+      weightedRealizedApr += realizedApr * capital;
+      weightedProjectedApr += projectedApr * capital;
+      totalFunding += realized.totalFundingUsd;
     }
     return {
       totalCapital,
-      blendedApr: totalCapital > 0 ? weightedApr / totalCapital : 0,
+      blendedRealizedApr: totalCapital > 0 ? weightedRealizedApr / totalCapital : 0,
+      blendedProjectedApr: totalCapital > 0 ? weightedProjectedApr / totalCapital : 0,
       totalFunding,
     };
-  }, [pairs, snapshot, hlPositionsBySymbol]);
+  }, [pairs, snapshot, hlPositionsBySymbol, pairRealizedFunding]);
 
   const usdtPrem =
     snapshot?.fx.usdtKrwUpbit != null && snapshot?.fx.usdKrwHana != null
@@ -57,15 +68,30 @@ export default function SummaryStrip({ snapshot, hlPositionsBySymbol }: Props) {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-      <StatCard title="Total Funding" value={formatUsd(totals.totalFunding)}
-        subtitle="Realized since open" loading={!snapshot} />
-      <StatCard title="Blended APR" value={`${totals.blendedApr.toFixed(1)}%`}
-        subtitle="Weighted by capital" loading={!snapshot} />
-      <StatCard title="Capital Deployed" value={formatUsd(totals.totalCapital)}
-        subtitle="HL notional + KR spot" loading={!snapshot} />
-      <StatCard title="USDT 김프"
+      <StatCard
+        title="Realized Funding"
+        value={formatUsd(totals.totalFunding)}
+        subtitle="userFunding since open"
+        loading={!snapshot}
+      />
+      <StatCard
+        title="Realized APR"
+        value={`${totals.blendedRealizedApr.toFixed(1)}%`}
+        subtitle={`Est. ${totals.blendedProjectedApr.toFixed(1)}% at current rate`}
+        loading={!snapshot}
+      />
+      <StatCard
+        title="Capital Deployed"
+        value={formatUsd(totals.totalCapital)}
+        subtitle="HL notional + KR spot"
+        loading={!snapshot}
+      />
+      <StatCard
+        title="USDT 김프"
         value={usdtPrem != null ? `${usdtPrem >= 0 ? "+" : ""}${usdtPrem.toFixed(2)}%` : "—"}
-        subtitle="Upbit vs 하나은행" loading={!snapshot} />
+        subtitle="Upbit vs 하나은행"
+        loading={!snapshot}
+      />
     </div>
   );
 }

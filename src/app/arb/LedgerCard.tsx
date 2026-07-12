@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import type { ArbPair } from "@/lib/arbStore";
 import {
   calcPremiumPct,
@@ -6,35 +7,41 @@ import {
   calcAprPct,
   calcDeltaMismatchPct,
   isDeltaNeutral,
+  calcRealizedAprPct,
+  calcTotalReturnPct,
 } from "@/lib/arb";
 import { formatUsd, pnlColor } from "@/lib/format";
+import FundingHistoryChart from "./FundingHistoryChart";
 
 interface Props {
   pair: ArbPair;
   hlSizeAbs: number;
   hlMarkUsd: number;
-  fundingHourly: number;
-  cumFundingUsd: number;
+  fundingHourly: number;                                        // current 1h rate (for projected APR)
+  cumFundingUsd: number;                                         // from HL cumFunding.sinceOpen
   krLivePriceKrw: number;
   krPriceSource: "regular" | "nxt";
   usdKrwHana: number;
   usdtKrwUpbit: number;
   krName: string;
   krNxtSession?: "PRE" | "AFTER_MARKET" | null;
+  realizedFundingEvents: Array<{ time: number; usdc: number }>; // filtered to this pair's symbol
   onEdit: () => void;
   onClose: () => void;
 }
 
 export default function LedgerCard({
   pair, hlSizeAbs, hlMarkUsd, fundingHourly, cumFundingUsd,
-  krLivePriceKrw, krPriceSource, usdKrwHana, usdtKrwUpbit, krName, krNxtSession, onEdit, onClose,
+  krLivePriceKrw, krPriceSource, usdKrwHana, usdtKrwUpbit, krName, krNxtSession,
+  realizedFundingEvents,
+  onEdit, onClose,
 }: Props) {
   const premium = calcPremiumPct({ hlMarkUsd, usdtKrw: usdtKrwUpbit, krCloseKrw: krLivePriceKrw });
   const capital = calcCapitalUsd({
     hlSizeAbs, hlMarkUsd,
     krQuantity: pair.krLeg.quantity, krAvgPriceKrw: pair.krLeg.avgPriceKrw, usdKrwHana,
   });
-  const apr = calcAprPct({
+  const projectedApr = calcAprPct({
     hlNotionalUsd: hlSizeAbs * hlMarkUsd,
     fundingHourly,
     capitalUsd: capital,
@@ -45,6 +52,23 @@ export default function LedgerCard({
   });
   const neutral = isDeltaNeutral(delta);
   const isNxt = krPriceSource === "nxt";
+
+  // Realized metrics — filter events to since-open and derive stats
+  const now = Date.now();
+  const elapsedMs = Math.max(0, now - pair.createdAt);
+  const elapsedHours = elapsedMs / 3600000;
+  const elapsedDays = elapsedMs / 86400000;
+
+  const eventsSinceOpen = realizedFundingEvents.filter((e) => e.time >= pair.createdAt);
+  const totalRealizedFunding = eventsSinceOpen.reduce((s, e) => s + e.usdc, 0);
+  const settlementCount = eventsSinceOpen.length;
+
+  const realizedApr = calcRealizedAprPct({
+    totalFundingUsd: totalRealizedFunding,
+    capitalUsd: capital,
+    elapsedHours,
+  });
+  const totalReturnPct = calcTotalReturnPct(totalRealizedFunding, capital);
 
   return (
     <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
@@ -67,12 +91,12 @@ export default function LedgerCard({
         <div className="flex items-center gap-3 text-xs">
           <span
             className="text-hl-text-tertiary cursor-help"
-            title="현재 펀딩비가 유지된다고 가정한 연 수익률 · 분모 = HL 노셔널 + KR 현물 원화의 USD 환산"
+            title="실현 펀딩을 경과 시간으로 연환산한 실효 APR · 분모 = HL 노셔널 + KR 현물 원화의 USD 환산"
           >
-            APR<span className="text-hl-text-tertiary ml-0.5 text-[9px]">?</span>
+            실효 APR<span className="text-hl-text-tertiary ml-0.5 text-[9px]">?</span>
           </span>
-          <span className={`font-mono font-bold ${pnlColor(apr)}`}>
-            {apr.toFixed(1)}%
+          <span className={`font-mono font-bold ${pnlColor(realizedApr)}`}>
+            {realizedApr.toFixed(1)}%
           </span>
         </div>
       </div>
@@ -110,7 +134,45 @@ export default function LedgerCard({
         </div>
       </div>
 
-      <div className="flex items-center justify-between px-4 py-3 bg-hl-bg-primary/40">
+      {/* Realized stats row */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 px-4 py-3 bg-hl-bg-primary/40 border-t border-hl-border text-xs">
+        <div>
+          <div className="text-[10px] text-hl-text-tertiary uppercase">경과</div>
+          <div className="font-mono text-hl-text-primary">
+            {Math.floor(elapsedDays)}일 {Math.floor(elapsedHours % 24)}시간
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] text-hl-text-tertiary uppercase">정산</div>
+          <div className="font-mono text-hl-text-primary">{settlementCount}회</div>
+        </div>
+        <div>
+          <div className="text-[10px] text-hl-text-tertiary uppercase">누적 펀딩</div>
+          <div className={`font-mono font-bold ${pnlColor(totalRealizedFunding)}`}>
+            {formatUsd(totalRealizedFunding)}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] text-hl-text-tertiary uppercase">누적 수익률</div>
+          <div className={`font-mono font-bold ${pnlColor(totalReturnPct)}`}>
+            {totalReturnPct >= 0 ? "+" : ""}{totalReturnPct.toFixed(2)}%
+          </div>
+        </div>
+        <div>
+          <div
+            className="text-[10px] text-hl-text-tertiary uppercase cursor-help"
+            title="현재 펀딩률이 유지된다고 가정한 예상 APR"
+          >
+            예상 APR<span className="text-hl-text-tertiary/60 ml-0.5">?</span>
+          </div>
+          <div className={`font-mono ${pnlColor(projectedApr)}`}>
+            {projectedApr.toFixed(1)}%
+          </div>
+        </div>
+      </div>
+
+      {/* Secondary metrics row — premium / cumFundingUsd (HL native) / capital + actions */}
+      <div className="flex items-center justify-between px-4 py-3 bg-hl-bg-primary/40 border-t border-hl-border">
         <div className="flex gap-6 text-xs">
           <div>
             <div className="text-hl-text-tertiary text-[10px] uppercase">Premium</div>
@@ -119,7 +181,12 @@ export default function LedgerCard({
             </div>
           </div>
           <div>
-            <div className="text-hl-text-tertiary text-[10px] uppercase">Funding</div>
+            <div
+              className="text-hl-text-tertiary text-[10px] uppercase cursor-help"
+              title="HL cumFunding.sinceOpen (포지션 오픈 이후 HL 자체 집계)"
+            >
+              HL Funding
+            </div>
             <div className={`font-mono font-bold ${pnlColor(cumFundingUsd)}`}>
               {formatUsd(cumFundingUsd)}
             </div>
@@ -146,6 +213,28 @@ export default function LedgerCard({
           </button>
         </div>
       </div>
+
+      <HistoryToggle events={eventsSinceOpen} />
+    </div>
+  );
+}
+
+function HistoryToggle({ events }: { events: Array<{ time: number; usdc: number }> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-t border-hl-border">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-4 py-2 text-xs text-hl-text-tertiary hover:text-hl-text-primary transition-colors flex items-center justify-between"
+      >
+        <span>펀딩 히스토리 {open ? "▲" : "▼"}</span>
+        <span className="font-mono">{events.length}건</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4">
+          <FundingHistoryChart events={events} />
+        </div>
+      )}
     </div>
   );
 }

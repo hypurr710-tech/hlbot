@@ -9,14 +9,16 @@ import PairEditModal from "./PairEditModal";
 import type { LiveSnapshot } from "@/lib/aggregator/types";
 import type { ArbPair, KrLeg } from "@/lib/arbStore";
 import type { HlShortSnap } from "./useHlXyzShorts";
+import type { FundingEvent } from "@/lib/hyperliquid";
 import { selectLiveKrPrice, isLiveKrFromNxt } from "@/lib/arb";
 
 interface Props {
   snapshot: LiveSnapshot | null;
   shorts: HlShortSnap[];
+  fundingByAddress: Record<string, FundingEvent[]>;
 }
 
-export default function LedgerPanel({ snapshot, shorts }: Props) {
+export default function LedgerPanel({ snapshot, shorts, fundingByAddress }: Props) {
   const { pairs, addPair, updatePair, closePair } = useArbPairs();
   const { addresses } = useAddresses();
   const [modalState, setModalState] = useState<
@@ -113,6 +115,15 @@ export default function LedgerPanel({ snapshot, shorts }: Props) {
           }
           const krLive = selectLiveKrPrice(kr);
           const krSource: "regular" | "nxt" = isLiveKrFromNxt(kr) ? "nxt" : "regular";
+
+          // Filter funding events to this pair's symbol.
+          // Coin may be "xyz:SKHX" (HIP-3) or "SKHX" (bare) depending on API/dex — accept both.
+          const walletEvents = fundingByAddress[pair.hlAddress.toLowerCase()] ?? [];
+          const symbolShort = pair.hlSymbol.split(":").pop() ?? pair.hlSymbol;
+          const pairEvents = walletEvents
+            .filter((e) => e.delta.coin === pair.hlSymbol || e.delta.coin === symbolShort)
+            .map((e) => ({ time: e.time, usdc: parseFloat(e.delta.usdc) }));
+
           return (
             <LedgerCard
               key={pair.id}
@@ -127,6 +138,7 @@ export default function LedgerPanel({ snapshot, shorts }: Props) {
               usdtKrwUpbit={snapshot.fx.usdtKrwUpbit}
               krName={pair.krLeg.krName}
               krNxtSession={kr.nxtSession}
+              realizedFundingEvents={pairEvents}
               onEdit={() => setModalState({ mode: "edit", pair })}
               onClose={() => closePair(pair.id)}
             />

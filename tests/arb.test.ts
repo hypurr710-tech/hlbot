@@ -142,3 +142,77 @@ describe("arb.isLiveKrFromNxt", () => {
     expect(isLiveKrFromNxt({ ...base, nxtPrice: 2150000, marketOpen: true, nxtSession: null })).toBe(false);
   });
 });
+
+import { calcRealizedAprPct, calcTotalReturnPct, aggregateFundingByPeriod } from "@/lib/arb";
+
+describe("arb.calcRealizedAprPct", () => {
+  it("annualizes actual funding by elapsed hours over capital", () => {
+    // $127.4 over 76 hours on $3150 capital
+    // perHour = 127.4/76 = 1.676
+    // perYear = 1.676 * 8760 = 14684.4
+    // APR = 14684.4/3150 * 100 = 466.2%
+    const apr = calcRealizedAprPct({ totalFundingUsd: 127.4, capitalUsd: 3150, elapsedHours: 76 });
+    expect(apr).toBeCloseTo(466.2, 0);
+  });
+  it("returns 0 when elapsed is 0", () => {
+    expect(calcRealizedAprPct({ totalFundingUsd: 10, capitalUsd: 100, elapsedHours: 0 })).toBe(0);
+  });
+  it("returns 0 when capital is 0", () => {
+    expect(calcRealizedAprPct({ totalFundingUsd: 10, capitalUsd: 0, elapsedHours: 10 })).toBe(0);
+  });
+  it("handles negative funding", () => {
+    expect(calcRealizedAprPct({ totalFundingUsd: -50, capitalUsd: 1000, elapsedHours: 100 })).toBeLessThan(0);
+  });
+});
+
+describe("arb.calcTotalReturnPct", () => {
+  it("returns funding/capital × 100", () => {
+    expect(calcTotalReturnPct(50, 1000)).toBeCloseTo(5, 5);
+  });
+  it("returns 0 for zero capital", () => {
+    expect(calcTotalReturnPct(50, 0)).toBe(0);
+  });
+  it("returns negative for negative funding", () => {
+    expect(calcTotalReturnPct(-25, 500)).toBeCloseTo(-5, 5);
+  });
+});
+
+describe("arb.aggregateFundingByPeriod", () => {
+  const events = [
+    { time: new Date(2026, 6, 12, 10, 30).getTime(), usdc: 5 },  // 2026-07-12 10:xx
+    { time: new Date(2026, 6, 12, 10, 45).getTime(), usdc: 3 },  // same hour
+    { time: new Date(2026, 6, 12, 11, 5).getTime(), usdc: 4 },   // next hour
+    { time: new Date(2026, 6, 13, 9, 0).getTime(), usdc: 2 },    // next day
+  ];
+  it("buckets by hour", () => {
+    const buckets = aggregateFundingByPeriod(events, "hour");
+    expect(buckets).toHaveLength(3);
+    expect(buckets[0].usdc).toBe(8);
+    expect(buckets[0].count).toBe(2);
+  });
+  it("buckets by day", () => {
+    const buckets = aggregateFundingByPeriod(events, "day");
+    expect(buckets).toHaveLength(2);
+    expect(buckets[0].usdc).toBe(12);
+    expect(buckets[1].usdc).toBe(2);
+  });
+  it("buckets by month", () => {
+    const buckets = aggregateFundingByPeriod(events, "month");
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0].usdc).toBe(14);
+    expect(buckets[0].count).toBe(4);
+  });
+  it("returns empty array for empty input", () => {
+    expect(aggregateFundingByPeriod([], "day")).toEqual([]);
+  });
+  it("sorts buckets chronologically", () => {
+    const outOfOrder = [
+      { time: new Date(2026, 8, 1).getTime(), usdc: 1 },
+      { time: new Date(2026, 6, 1).getTime(), usdc: 2 },
+      { time: new Date(2026, 7, 1).getTime(), usdc: 3 },
+    ];
+    const buckets = aggregateFundingByPeriod(outOfOrder, "month");
+    expect(buckets[0].ts).toBeLessThan(buckets[1].ts);
+    expect(buckets[1].ts).toBeLessThan(buckets[2].ts);
+  });
+});

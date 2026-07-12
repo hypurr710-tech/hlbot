@@ -226,6 +226,43 @@ export async function getUserFills(
   return (await postInfo({ type: "userFills", user })) as Fill[];
 }
 
+export interface FundingEvent {
+  time: number;
+  delta: {
+    coin: string;         // "xyz:SKHX" for HIP-3, "BTC" for standard perps
+    fundingRate: string;
+    szi: string;
+    type: "funding";
+    usdc: string;
+    nSamples?: number;    // number of hourly samples aggregated (typically 24 for daily)
+  };
+  hash: string;
+}
+
+/**
+ * Fetch funding events for a user, optionally scoped to a HIP-3 dex.
+ * Verified against live API 2026-07-12:
+ * - Response is a flat array of events
+ * - `delta.coin` includes the `xyz:` prefix for HIP-3 dex assets (no prefix for standard perps)
+ * - The `dex` param is accepted but appears to be a hint; filter client-side by coin prefix to be safe
+ * - Events may include `nSamples` field indicating hours aggregated
+ */
+export async function getUserFunding(
+  user: string,
+  startTime: number,
+  dex?: string,
+  endTime?: number
+): Promise<FundingEvent[]> {
+  const body: Record<string, unknown> = {
+    type: "userFunding",
+    user,
+    startTime,
+  };
+  if (endTime !== undefined) body.endTime = endTime;
+  if (dex !== undefined) body.dex = dex;
+  return (await postInfo(body)) as FundingEvent[];
+}
+
 const FILLS_PAGE_LIMIT = 2000;
 
 /** Fetch fills with pagination. maxPages controls how deep to go. */

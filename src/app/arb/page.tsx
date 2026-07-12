@@ -1,7 +1,10 @@
 "use client";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLiveSnapshot } from "./useLiveSnapshot";
 import { useHlXyzShorts } from "./useHlXyzShorts";
+import { useArbPairs } from "@/hooks/useArbPairs";
+import { fetchFundingWithCache } from "./useFundingHistory";
+import type { FundingEvent } from "@/lib/hyperliquid";
 import LedgerPanel from "./LedgerPanel";
 import ScannerPanel from "./ScannerPanel";
 import SummaryStrip from "./SummaryStrip";
@@ -9,6 +12,7 @@ import SummaryStrip from "./SummaryStrip";
 export default function ArbPage() {
   const { snapshot, error } = useLiveSnapshot();
   const shorts = useHlXyzShorts();
+  const { pairs } = useArbPairs();
 
   const shortsByKey = useMemo(() => {
     const m: Record<string, { sizeAbs: number; cumFundingUsd: number }> = {};
@@ -20,6 +24,60 @@ export default function ArbPage() {
     }
     return m;
   }, [shorts]);
+
+  // Unique wallet addresses for pairs currently in play — fetch userFunding for each.
+  const activePairs = useMemo(() => pairs.filter((p) => !p.closedAt), [pairs]);
+  const uniqueAddresses = useMemo(
+    () => Array.from(new Set(activePairs.map((p) => p.hlAddress.toLowerCase()))).sort(),
+    [activePairs]
+  );
+  const uniqueAddressesKey = uniqueAddresses.join(",");
+
+  const [fundingByAddress, setFundingByAddress] = useState<Record<string, FundingEvent[]>>({});
+
+  useEffect(() => {
+    if (uniqueAddresses.length === 0) {
+      setFundingByAddress({});
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      const results = await Promise.all(
+        uniqueAddresses.map(async (addr) => {
+          try {
+            const events = await fetchFundingWithCache(addr);
+            return [addr, events] as const;
+          } catch {
+            return [addr, [] as FundingEvent[]] as const;
+          }
+        })
+      );
+      if (cancelled) return;
+      const m: Record<string, FundingEvent[]> = {};
+      for (const [addr, events] of results) m[addr] = events;
+      setFundingByAddress(m);
+    };
+    load();
+    const t = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uniqueAddressesKey]);
+
+  // Per-pair realized totals for SummaryStrip.
+  const pairRealizedFunding = useMemo(() => {
+    const now = Date.now();
+    const m: Record<string, { totalFundingUsd: number; elapsedHours: number }> = {};
+    for (const p of activePairs) {
+      const walletEvents = fundingByAddress[p.hlAddress.toLowerCase()] ?? [];
+      const symbolShort = p.hlSymbol.split(":").pop() ?? p.hlSymbol;
+      const total = walletEvents
+        .filter((e) => e.time >= p.createdAt && (e.delta.coin === p.hlSymbol || e.delta.coin === symbolShort))
+        .reduce((s, e) => s + parseFloat(e.delta.usdc), 0);
+      const elapsedHours = Math.max(0, now - p.createdAt) / 3600000;
+      m[p.id] = { totalFundingUsd: total, elapsedHours };
+    }
+    return m;
+  }, [activePairs, fundingByAddress]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -51,12 +109,20 @@ export default function ArbPage() {
         </div>
       )}
 
-      <SummaryStrip snapshot={snapshot} hlPositionsBySymbol={shortsByKey} />
+      <SummaryStrip
+        snapshot={snapshot}
+        hlPositionsBySymbol={shortsByKey}
+        pairRealizedFunding={pairRealizedFunding}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section>
           <h2 className="text-lg font-semibold text-hl-text-primary mb-4">My Ledger</h2>
-          <LedgerPanel snapshot={snapshot} shorts={shorts} />
+          <LedgerPanel
+            snapshot={snapshot}
+            shorts={shorts}
+            fundingByAddress={fundingByAddress}
+          />
         </section>
         <section>
           <h2 className="text-lg font-semibold text-hl-text-primary mb-4">Opportunity Scanner</h2>
@@ -70,6 +136,7 @@ export default function ArbPage() {
             <span className="text-hl-text-secondary font-semibold">Data sources</span>
             <ul className="mt-1 space-y-0.5">
               <li>· Perp mark / funding: <span className="text-hl-accent">api.hyperliquid.xyz</span> (metaAndAssetCtxs, xyz dex)</li>
+              <li>· 실현 펀딩 이벤트: <span className="text-hl-accent">api.hyperliquid.xyz</span> (userFunding, coin 필터)</li>
               <li>· KR 현물 종가 / NXT: <span className="text-hl-accent">m.stock.naver.com</span></li>
               <li>· USDT/KRW: <span className="text-hl-accent">api.upbit.com</span></li>
               <li>· USD/KRW: <span className="text-hl-accent">finance.naver.com</span> (하나은행 기준)</li>
@@ -78,10 +145,11 @@ export default function ArbPage() {
           <div>
             <span className="text-hl-text-secondary font-semibold">계산식</span>
             <ul className="mt-1 space-y-0.5">
+              <li>· 실효 APR = (실현 펀딩 / 경과 시간) × 8760 / 자본</li>
+              <li>· 예상 APR = HL 노셔널 × 현재 시간당 펀딩률 × 8760 / 자본</li>
               <li>· 프리미엄 = (HL × USDT/KRW − KR 라이브가) / KR 라이브가</li>
-              <li>· 투입자본 = HL 노셔널 + KR 원금 (하나은행 환율 USD 환산)</li>
               <li>· 델타중립 판정: |불일치| &lt; 3%</li>
-              <li>· 갱신 주기 5s · KR 라이브가 = 정규장 열림 시 종가필드, 마감 후 NXT</li>
+              <li>· 갱신 주기 5s (라이브가) / 60s (펀딩 이벤트)</li>
             </ul>
           </div>
         </div>
