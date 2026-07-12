@@ -5,12 +5,13 @@ import { loadTickerMap } from "@/lib/tickerMap";
 import {
   calcPremiumPct,
   calcAprPct,
-  calcCapitalUsd,
+  calcCapitalForBasis,
   hlPriceKrw,
   selectLiveKrPrice,
   isLiveKrFromNxt,
 } from "@/lib/arb";
 import { pnlColor, formatNumber } from "@/lib/format";
+import { useAprBasis } from "@/lib/aprBasis";
 
 type SortKey = "apr" | "premium" | "funding" | "volume";
 
@@ -59,6 +60,7 @@ export default function ScannerTable({ snapshot }: Props) {
   // a near-zero-premium name is often the *best* delta-neutral entry — hiding it
   // by premium would bury the opportunity. Opt in when hunting kimchi-premium.
   const [premiumOnly, setPremiumOnly] = useState(false);
+  const { basis } = useAprBasis();
 
   const rows = useMemo<Row[]>(() => {
     if (snapshot.fx.usdKrwHana == null || snapshot.fx.usdtKrwUpbit == null) return [];
@@ -79,12 +81,13 @@ export default function ScannerTable({ snapshot }: Props) {
       if (premiumOnly && Math.abs(premium) < HIDE_BELOW_ABS_PREMIUM_PCT) continue;
       const hlSizeAbs = 1;
       const krQuantity = krLive > 0 ? (hl.markPx * snapshot.fx.usdKrwHana) / krLive : 0;
-      const capital = calcCapitalUsd({
+      const capital = calcCapitalForBasis({
         hlSizeAbs,
         hlMarkUsd: hl.markPx,
         krQuantity,
         krAvgPriceKrw: krLive,
         usdKrwHana: snapshot.fx.usdKrwHana,
+        basis,
       });
       const apr = calcAprPct({
         hlNotionalUsd: hl.markPx,
@@ -120,7 +123,7 @@ export default function ScannerTable({ snapshot }: Props) {
       if (sortKey === "funding") return b.fundingHourly - a.fundingHourly;
       return b.dayNtlVlm - a.dayNtlVlm;
     });
-  }, [snapshot, sortKey, query, premiumOnly]);
+  }, [snapshot, sortKey, query, premiumOnly, basis]);
 
   return (
     <div className="space-y-4">

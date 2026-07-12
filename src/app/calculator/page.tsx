@@ -2,8 +2,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLiveSnapshot } from "@/app/arb/useLiveSnapshot";
 import { loadTickerMap } from "@/lib/tickerMap";
-import { calcCapitalUsd, calcAprPct, selectLiveKrPrice } from "@/lib/arb";
+import { calcCapitalForBasis, calcAprPct, selectLiveKrPrice } from "@/lib/arb";
 import { groupDigits } from "@/lib/format";
+import { useAprBasis, APR_BASIS_LABEL } from "@/lib/aprBasis";
 
 const won = (n: number) => `₩${Math.round(n).toLocaleString("ko-KR")}`;
 const usd = (n: number) =>
@@ -11,6 +12,7 @@ const usd = (n: number) =>
 
 export default function CalculatorPage() {
   const { snapshot } = useLiveSnapshot();
+  const { basis } = useAprBasis();
 
   const [amountStr, setAmountStr] = useState("10000000"); // 1천만원 기본
   const [currency, setCurrency] = useState<"KRW" | "USD">("KRW");
@@ -30,13 +32,13 @@ export default function CalculatorPage() {
       if (!hl || !kr) continue;
       const krLive = selectLiveKrPrice(kr);
       const krQuantity = krLive > 0 ? (hl.markPx * snapshot.fx.usdKrwHana) / krLive : 0;
-      const capital = calcCapitalUsd({
-        hlSizeAbs: 1, hlMarkUsd: hl.markPx, krQuantity, krAvgPriceKrw: krLive, usdKrwHana: snapshot.fx.usdKrwHana,
+      const capital = calcCapitalForBasis({
+        hlSizeAbs: 1, hlMarkUsd: hl.markPx, krQuantity, krAvgPriceKrw: krLive, usdKrwHana: snapshot.fx.usdKrwHana, basis,
       });
       m[t.hlSymbol] = calcAprPct({ hlNotionalUsd: hl.markPx, fundingHourly: hl.fundingHourly, capitalUsd: capital });
     }
     return m;
-  }, [snapshot, symbols]);
+  }, [snapshot, symbols, basis]);
 
   // Auto-fill FX from the live snapshot once (user can override afterwards).
   useEffect(() => {
@@ -113,7 +115,7 @@ export default function CalculatorPage() {
             />
             {symbols.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap mt-2">
-                <span className="text-[11px] text-hl-text-tertiary">종목 현재 APR로 채우기:</span>
+                <span className="text-[11px] text-hl-text-tertiary">종목 현재 APR로 채우기 ({APR_BASIS_LABEL[basis]} 기준):</span>
                 {symbols.map((t) => (
                   <button
                     key={t.hlSymbol}

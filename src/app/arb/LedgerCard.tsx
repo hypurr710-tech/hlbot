@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { ArbPair } from "@/lib/arbStore";
 import {
   calcPremiumPct,
-  calcCapitalUsd,
+  calcCapitalForBasis,
   calcAprPct,
   calcDeltaMismatchPct,
   isDeltaNeutral,
@@ -13,6 +13,7 @@ import {
   isAprReliable,
 } from "@/lib/arb";
 import { pairOpenedAt } from "@/lib/arbStore";
+import { useAprBasis } from "@/lib/aprBasis";
 import { formatUsd, pnlColor } from "@/lib/format";
 import FundingHistoryChart from "./FundingHistoryChart";
 
@@ -39,10 +40,12 @@ export default function LedgerCard({
   realizedFundingEvents,
   onEdit, onClose,
 }: Props) {
+  const { basis } = useAprBasis();
   const premium = calcPremiumPct({ hlMarkUsd, usdtKrw: usdtKrwUpbit, krCloseKrw: krLivePriceKrw });
-  const capital = calcCapitalUsd({
+  const capital = calcCapitalForBasis({
     hlSizeAbs, hlMarkUsd,
     krQuantity: pair.krLeg.quantity, krAvgPriceKrw: pair.krLeg.avgPriceKrw, usdKrwHana,
+    basis,
   });
   const projectedApr = calcAprPct({
     hlNotionalUsd: hlSizeAbs * hlMarkUsd,

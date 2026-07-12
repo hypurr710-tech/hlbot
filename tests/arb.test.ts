@@ -53,6 +53,18 @@ describe("arb.calcCapitalUsd", () => {
   });
 });
 
+import { calcCapitalForBasis } from "@/lib/arb";
+
+describe("arb.calcCapitalForBasis", () => {
+  const base = { hlSizeAbs: 1, hlMarkUsd: 1474.85, krQuantity: 1, krAvgPriceKrw: 2170000, usdKrwHana: 1494 };
+  it("'full' equals HL notional + KR spot (same as calcCapitalUsd)", () => {
+    expect(calcCapitalForBasis({ ...base, basis: "full" })).toBeCloseTo(2927.33, 1);
+  });
+  it("'hl' is HL notional only (smaller denominator → higher APR)", () => {
+    expect(calcCapitalForBasis({ ...base, basis: "hl" })).toBeCloseTo(1474.85, 2);
+  });
+});
+
 describe("arb.calcAprPct", () => {
   it("annualizes hourly funding against total capital", () => {
     // Notional $1474.85, funding 0.0055%/h = 0.000055, capital $2927.33

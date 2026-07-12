@@ -7,6 +7,7 @@ import {
   TrackedAddress,
   getStoredAddresses,
 } from "@/lib/store";
+import { AprBasisProvider } from "@/lib/aprBasis";
 
 export default function ClientLayout({
   children,
@@ -22,6 +23,7 @@ export default function ClientLayout({
 
   return (
     <AddressContext.Provider value={{ addresses, setAddresses }}>
+      <AprBasisProvider>
       <div className="flex min-h-screen">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         {/* Mobile header with hamburger */}
@@ -41,6 +43,7 @@ export default function ClientLayout({
           <div className="p-4 md:p-8 max-w-[1400px] mx-auto">{children}</div>
         </main>
       </div>
+      </AprBasisProvider>
     </AddressContext.Provider>
   );
 }

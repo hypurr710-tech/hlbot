@@ -45,6 +45,28 @@ export function calcCapitalUsd(args: {
   return hlNotional + krCostUsd;
 }
 
+/** Which capital sits in the APR denominator. */
+export type AprBasis = "full" | "hl";
+
+/**
+ * Capital for the APR denominator under the chosen basis:
+ * - "full": delta-neutral total — HL notional + KR spot (USD). Reflects the real
+ *   money tied up across both legs.
+ * - "hl": Hyperliquid notional only — matches HL-only trackers (e.g. changwoo),
+ *   yields a higher APR because the denominator is smaller.
+ */
+export function calcCapitalForBasis(args: {
+  hlSizeAbs: number;
+  hlMarkUsd: number;
+  krQuantity: number;
+  krAvgPriceKrw: number;
+  usdKrwHana: number;
+  basis: AprBasis;
+}): number {
+  if (args.basis === "hl") return args.hlSizeAbs * args.hlMarkUsd;
+  return calcCapitalUsd(args);
+}
+
 export function calcAprPct(args: {
   hlNotionalUsd: number;
   fundingHourly: number;

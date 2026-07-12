@@ -162,11 +162,11 @@ export default function ArbPage() {
           <div>
             <span className="text-hl-text-secondary font-semibold">계산식</span>
             <ul className="mt-1 space-y-0.5">
-              <li>· 실효 APR = (실현 펀딩 / 경과 시간) × 8760 / 자본</li>
-              <li>· 예상 APR = HL 노셔널 × 현재 시간당 펀딩률 × 8760 / 자본</li>
-              <li>· 프리미엄 = (HL × USDT/KRW − KR 라이브가) / KR 라이브가</li>
+              <li>· 실효 APR = 지금까지 받은 펀딩을 경과 시간으로 나눠 시간당 수익을 구하고, 1년치(×8760 = 24시간×365일)로 환산해 자본으로 나눈 값</li>
+              <li>· 예상 APR = 현재 시간당 펀딩률이 1년간 유지된다고 가정했을 때의 예상 연 수익률</li>
+              <li>· 프리미엄 = HL 가격을 원화로 환산한 값이 국내 실시간가보다 몇 % 비싼지 (국내 실시간가 = 장중엔 현재가, 장 마감 후엔 NXT 시간외가)</li>
               <li>· 델타중립 판정: |불일치| &lt; 3%</li>
-              <li>· 갱신 주기 5s (라이브가) / 60s (펀딩 이벤트)</li>
+              <li>· 갱신 주기 5초(가격) / 60초(펀딩 이벤트)</li>
               <li className="text-hl-yellow/70">· 모든 수익률은 <span className="font-semibold">gross</span> — HL 수수료·국내 거래세·환전 스프레드 미반영</li>
             </ul>
           </div>
