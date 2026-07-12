@@ -113,7 +113,7 @@ export default function LedgerCard({
                 : "24시간 · 정산 3회 이상 쌓이면 표시됩니다 (초단기 연환산은 왜곡이 큼)"
             }
           >
-            실효 APR<span className="text-hl-text-tertiary ml-0.5 text-[9px]">?</span>
+            실효 APR
           </span>
           {aprReliable ? (
             <span className={`font-mono font-bold ${pnlColor(realizedApr)}`}>
@@ -187,7 +187,7 @@ export default function LedgerCard({
             className="text-[10px] text-hl-text-tertiary uppercase cursor-help"
             title={`최근 24시간 펀딩 실적을 연환산한 run-rate · 현재 1h 펀딩률 기준 순간 예상치는 ${projectedApr.toFixed(1)}%`}
           >
-            최근24h APR<span className="text-hl-text-tertiary/60 ml-0.5">?</span>
+            최근24h APR
           </div>
           <div className={`font-mono ${pnlColor(recentApr)}`}>
             {settlementCount > 0 ? `${recentApr.toFixed(1)}%` : "—"}

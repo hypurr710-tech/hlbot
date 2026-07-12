@@ -188,8 +188,10 @@ function OpportunityCard({ row: r }: { row: Row }) {
 
   // Quick simulator: N shares hedged delta-neutral (short N HL units + long N KR
   // shares). Funding is earned on the short leg, so income scales linearly with N.
-  const [qty, setQty] = useState(10);
-  const n = Number.isFinite(qty) && qty > 0 ? qty : 0;
+  // Keep the raw string so the field can be cleared while typing (parseInt of an
+  // empty string is NaN, which React rejects as an input value).
+  const [qtyStr, setQtyStr] = useState("10");
+  const n = Math.max(0, parseInt(qtyStr, 10) || 0);
   const simMonthlyUsd = n * r.projected24hFundingUsd * 30;
   const simYearlyUsd = n * r.projected24hFundingUsd * 365;
   const simNotionalKrw = n * r.hlPriceInKrw;
@@ -251,7 +253,7 @@ function OpportunityCard({ row: r }: { row: Row }) {
           </div>
           <div className={`text-xs font-mono ${pnlColor(dayChangePct)}`}>
             {dayChangePct >= 0 ? "+" : ""}
-            {dayChangePct.toFixed(2)}% 전일比
+            {dayChangePct.toFixed(2)}% 전일 대비
           </div>
         </div>
         <div className="px-5 py-3">
@@ -322,7 +324,7 @@ function OpportunityCard({ row: r }: { row: Row }) {
               className="text-[11px] text-hl-text-tertiary uppercase tracking-wider cursor-help"
               title="현재 펀딩률이 유지된다고 가정한 연 수익률 · 분모 = HL 노셔널 + KR 현물 원화의 USD 환산"
             >
-              APR <span className="text-hl-text-tertiary/60">?</span>
+              APR
             </div>
             <div className={`text-2xl font-bold font-mono tabular-nums ${pnlColor(r.aprPct)}`}>
               {r.aprPct.toFixed(1)}%
@@ -349,13 +351,29 @@ function OpportunityCard({ row: r }: { row: Row }) {
       <div className="px-5 py-3 border-t border-hl-border bg-hl-bg-tertiary/40 flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 text-sm text-hl-text-secondary">
           <span className="text-hl-text-tertiary text-xs uppercase tracking-wider">시뮬</span>
-          <input
-            type="number"
-            min={1}
-            value={qty}
-            onChange={(e) => setQty(parseInt(e.target.value, 10))}
-            className="w-16 bg-hl-bg-tertiary border border-hl-border rounded px-2 py-1 font-mono text-hl-text-primary text-right outline-none focus:border-hl-border-light"
-          />
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => setQtyStr(String(Math.max(1, n - 1)))}
+              className="w-7 h-8 flex items-center justify-center rounded-l border border-hl-border bg-hl-bg-tertiary text-hl-text-secondary hover:bg-hl-bg-hover hover:text-hl-text-primary transition-colors"
+            >
+              −
+            </button>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={qtyStr}
+              onChange={(e) => setQtyStr(e.target.value.replace(/[^0-9]/g, ""))}
+              className="w-12 h-8 bg-hl-bg-tertiary border-y border-hl-border font-mono text-hl-text-primary text-center outline-none focus:bg-hl-bg-hover"
+            />
+            <button
+              type="button"
+              onClick={() => setQtyStr(String(n + 1))}
+              className="w-7 h-8 flex items-center justify-center rounded-r border border-hl-border bg-hl-bg-tertiary text-hl-text-secondary hover:bg-hl-bg-hover hover:text-hl-text-primary transition-colors"
+            >
+              +
+            </button>
+          </div>
           <span>주 델타중립 진입 시</span>
         </div>
         <div className="ml-auto flex items-center gap-4 font-mono tabular-nums">
