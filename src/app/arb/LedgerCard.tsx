@@ -19,13 +19,15 @@ interface Props {
   usdKrwHana: number;
   usdtKrwUpbit: number;
   krName: string;
+  krNxtPrice?: number | null;
+  krNxtSession?: "PRE" | "AFTER_MARKET" | null;
   onEdit: () => void;
   onClose: () => void;
 }
 
 export default function LedgerCard({
   pair, hlSizeAbs, hlMarkUsd, fundingHourly, cumFundingUsd,
-  krCloseKrw, usdKrwHana, usdtKrwUpbit, krName, onEdit, onClose,
+  krCloseKrw, usdKrwHana, usdtKrwUpbit, krName, krNxtPrice, krNxtSession, onEdit, onClose,
 }: Props) {
   const premium = calcPremiumPct({ hlMarkUsd, usdtKrw: usdtKrwUpbit, krCloseKrw });
   const capital = calcCapitalUsd({
@@ -94,6 +96,12 @@ export default function LedgerCard({
           <div className="text-[11px] text-hl-text-tertiary mt-1">
             Avg ₩{pair.krLeg.avgPriceKrw.toLocaleString("ko-KR")} · Qty {pair.krLeg.quantity}
           </div>
+          {krNxtPrice != null && (
+            <div className="text-[11px] text-hl-accent mt-1">
+              NXT ₩{krNxtPrice.toLocaleString("ko-KR")}
+              {krNxtSession && <span className="text-hl-text-tertiary ml-1">({krNxtSession})</span>}
+            </div>
+          )}
         </div>
       </div>
 

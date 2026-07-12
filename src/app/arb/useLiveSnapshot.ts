@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { LiveSnapshot } from "@/lib/aggregator/types";
+import { loadTickerMap } from "@/lib/tickerMap";
 
 const POLL_MS = 5000;
 
@@ -13,7 +14,13 @@ export function useLiveSnapshot() {
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await fetch("/api/aggregator", { cache: "no-store" });
+        const tickers = loadTickerMap()
+          .map((t) => `${t.hlSymbol}:${t.krCode}`)
+          .join(",");
+        const url = tickers
+          ? `/api/aggregator?tickers=${encodeURIComponent(tickers)}`
+          : "/api/aggregator";
+        const res = await fetch(url, { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as LiveSnapshot;
         if (!cancelled) {

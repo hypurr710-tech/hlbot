@@ -87,6 +87,8 @@ export default function LedgerPanel({ snapshot, shorts }: Props) {
               usdKrwHana={snapshot.fx.usdKrwHana}
               usdtKrwUpbit={snapshot.fx.usdtKrwUpbit}
               krName={pair.krLeg.krName}
+              krNxtPrice={kr.nxtPrice}
+              krNxtSession={kr.nxtSession}
               onEdit={() => setModalState({ mode: "edit", pair })}
               onClose={() => closePair(pair.id)}
             />

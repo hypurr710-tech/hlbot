@@ -89,7 +89,7 @@ export default function ScannerTable({ snapshot }: Props) {
             <th className="px-3 py-2 text-right">Spot</th>
             <th className="px-3 py-2 text-right">Prem</th>
             <th className="px-3 py-2 text-right">APR</th>
-            <th className="px-3 py-2 text-right">1h Fund</th>
+            <th className="px-3 py-2 text-right">24h Fund</th>
           </tr>
         </thead>
         <tbody>
@@ -114,7 +114,7 @@ export default function ScannerTable({ snapshot }: Props) {
                 {r.aprPct.toFixed(1)}%
               </td>
               <td className={`px-3 py-2 text-right font-mono ${pnlColor(r.fundingHourly)}`}>
-                {(r.fundingHourly * 100).toFixed(4)}%
+                {(r.fundingHourly * 24 * 100).toFixed(3)}%
               </td>
             </tr>
           ))}

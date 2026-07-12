@@ -20,8 +20,26 @@ function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T>
   });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const warnings: string[] = [];
+
+  // Parse ticker overrides from query
+  const url = new URL(request.url);
+  const rawTickers = url.searchParams.get("tickers");
+  const requestedTickers: Array<{ hlSymbol: string; krCode: string }> = rawTickers
+    ? rawTickers.split(",").map((s) => {
+        const parts = s.split(":").map((p) => p.trim());
+        // Expect "xyz:SYM:KRCODE" → 3 parts
+        if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+        return { hlSymbol: `${parts[0]}:${parts[1]}`, krCode: parts[2] };
+      }).filter((t): t is { hlSymbol: string; krCode: string } => t !== null)
+    : [];
+
+  // Union with seed, dedup by hlSymbol
+  const symbolMap = new Map<string, string>(); // hlSymbol -> krCode
+  for (const s of seedList) symbolMap.set(s.hlSymbol, s.krCode);
+  for (const t of requestedTickers) symbolMap.set(t.hlSymbol, t.krCode);
+  const allTickers = Array.from(symbolMap.entries()).map(([hlSymbol, krCode]) => ({ hlSymbol, krCode }));
 
   const [hlResult, upbitResult, naverFxResult] = await Promise.allSettled([
     cached("hl:xyz", 5000, fetchHlXyzCtxs),
@@ -40,7 +58,7 @@ export async function GET() {
 
   // Fetch KR spots for every mapped symbol in parallel
   const krEntries = await Promise.all(
-    seedList.map(async (t) => {
+    allTickers.map(async (t) => {
       const q = await cached(`kr:${t.krCode}`, 5000, () => fetchNaverSpot(t.krCode));
       return [t.hlSymbol, q] as const;
     })
