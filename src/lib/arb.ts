@@ -38,3 +38,23 @@ export function calcAprPct(args: {
   const perYearUsd = perHourUsd * 24 * 365;
   return (perYearUsd / capitalUsd) * 100;
 }
+
+export function calcDeltaMismatchPct(args: {
+  hlSizeAbs: number;
+  hlMarkUsd: number;
+  krQuantity: number;
+  krCloseKrw: number;
+  usdKrwHana: number;
+}): number {
+  const { hlSizeAbs, hlMarkUsd, krQuantity, krCloseKrw, usdKrwHana } = args;
+  const hlNotional = hlSizeAbs * hlMarkUsd;
+  const krNotionalUsd = usdKrwHana > 0 ? (krQuantity * krCloseKrw) / usdKrwHana : 0;
+  if (krNotionalUsd === 0) return hlNotional === 0 ? 0 : Number.POSITIVE_INFINITY;
+  return ((hlNotional - krNotionalUsd) / krNotionalUsd) * 100;
+}
+
+export const DELTA_NEUTRAL_THRESHOLD_PCT = 3;
+
+export function isDeltaNeutral(mismatchPct: number): boolean {
+  return Math.abs(mismatchPct) < DELTA_NEUTRAL_THRESHOLD_PCT;
+}

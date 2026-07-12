@@ -76,3 +76,44 @@ describe("arb.calcAprPct", () => {
     expect(apr).toBeLessThan(0);
   });
 });
+
+import { calcDeltaMismatchPct, isDeltaNeutral } from "@/lib/arb";
+
+describe("arb.calcDeltaMismatchPct", () => {
+  it("returns near zero for balanced pair", () => {
+    // HL notional: 1 × $1474 = $1474
+    // KR notional now: 1 × ₩2,180,000 / 1494 = $1459
+    // mismatch: (1474 - 1459) / 1459 = 1.03%
+    const d = calcDeltaMismatchPct({
+      hlSizeAbs: 1,
+      hlMarkUsd: 1474,
+      krQuantity: 1,
+      krCloseKrw: 2180000,
+      usdKrwHana: 1494,
+    });
+    expect(Math.abs(d)).toBeLessThan(3);
+  });
+
+  it("returns > 3 for imbalanced pair", () => {
+    // 2 HL shorts, only 1 KR share
+    const d = calcDeltaMismatchPct({
+      hlSizeAbs: 2,
+      hlMarkUsd: 1474,
+      krQuantity: 1,
+      krCloseKrw: 2180000,
+      usdKrwHana: 1494,
+    });
+    expect(Math.abs(d)).toBeGreaterThan(50);
+  });
+});
+
+describe("arb.isDeltaNeutral", () => {
+  it("true when |mismatch| < 3", () => {
+    expect(isDeltaNeutral(1.5)).toBe(true);
+    expect(isDeltaNeutral(-2.9)).toBe(true);
+  });
+  it("false when |mismatch| >= 3", () => {
+    expect(isDeltaNeutral(3.0)).toBe(false);
+    expect(isDeltaNeutral(-5)).toBe(false);
+  });
+});
