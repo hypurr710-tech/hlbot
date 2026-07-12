@@ -43,6 +43,25 @@ const navItems = [
     ),
   },
   {
+    href: "/arb",
+    label: "Arb",
+    icon: (
+      <svg
+        className="w-[18px] h-[18px]"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={1.5}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4"
+        />
+      </svg>
+    ),
+  },
+  {
     href: "/trades",
     label: "Trades",
     icon: (
