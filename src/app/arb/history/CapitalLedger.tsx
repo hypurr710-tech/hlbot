@@ -41,24 +41,31 @@ async function fetchHlFlows(addresses: string[]): Promise<AutoRow[]> {
   for (const [addr, updates] of results) {
     for (const u of updates) {
       const t = u.delta.type;
-      let signedAmt: number | null = null;
-      let memo = "";
-      const amt = Math.abs(parseFloat(String(u.delta.usdc ?? "0")));
+      const d = u.delta as Record<string, unknown>;
+      // 금액 필드가 유형마다 다름: deposit/withdraw는 usdc, send류는 amount
+      const amt = Math.abs(parseFloat(String(d.usdc ?? d.amount ?? "0")));
       if (!Number.isFinite(amt) || amt === 0) continue;
+      let signedAmt: number;
+      let memo: string;
       if (t === "deposit") {
         signedAmt = amt;
         memo = "입금 · 온체인 자동";
       } else if (t === "withdraw") {
         signedAmt = -amt;
         memo = "출금 · 온체인 자동";
-      } else if (t === "internalTransfer" || t === "subAccountTransfer" || t === "spotTransfer") {
+      } else if (
+        t === "send" || t === "internalTransfer" || t === "subAccountTransfer" || t === "spotTransfer"
+      ) {
+        // USDC 이동만 자본으로 집계 (코인 전송은 금액 단위가 달라 제외)
+        const token = String(d.token ?? "USDC");
+        if (token !== "USDC") continue;
         // 수신자면 +, 발신자면 − (destination이 조회 지갑인지로 판별)
-        const dest = String((u.delta as Record<string, unknown>).destination ?? "").toLowerCase();
+        const dest = String(d.destination ?? "").toLowerCase();
         const incoming = dest === addr.toLowerCase();
         signedAmt = incoming ? amt : -amt;
         memo = incoming ? "이체 수신 · 자동" : "이체 발신 · 자동";
       } else {
-        continue; // accountClassTransfer(perp↔spot) 등 내부 이동은 제외
+        continue; // accountClassTransfer(perp↔spot)·borrowLend(HLP 렌딩) 등 내부 이동은 제외
       }
       const key = `${addr}|${u.hash}|${u.time}|${t}`;
       if (seen.has(key)) continue;

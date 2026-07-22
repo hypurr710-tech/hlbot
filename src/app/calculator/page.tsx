@@ -179,7 +179,8 @@ export default function PortfolioPage() {
 
   const hasFundingItem = items.some((i) => i.type === "funding");
   const inputCls =
-    "bg-hl-bg-tertiary border border-hl-border rounded px-2 py-1 text-hl-text-primary font-mono";
+    "bg-hl-bg-tertiary border border-hl-border rounded-lg px-3 py-2.5 text-sm text-hl-text-primary font-mono placeholder:text-hl-text-tertiary focus:border-hl-accent/60 focus:outline-none transition-colors";
+  const fieldLabelCls = "block text-[11px] uppercase tracking-wider text-hl-text-tertiary mb-1.5";
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -270,53 +271,57 @@ export default function PortfolioPage() {
 
       {/* 항목 테이블 */}
       <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-hl-border flex items-baseline justify-between">
-          <h3 className="text-sm font-semibold text-hl-text-primary">자산 항목</h3>
-          <span className="text-[11px] text-hl-text-tertiary font-mono">{items.length}개</span>
+        <div className="px-5 py-3.5 border-b border-hl-border flex items-baseline justify-between">
+          <h3 className="text-base font-semibold text-hl-text-primary">자산 항목</h3>
+          <span className="text-xs text-hl-text-tertiary font-mono">{items.length}개</span>
         </div>
         {rows.length === 0 ? (
-          <div className="h-24 flex items-center justify-center text-xs text-hl-text-tertiary">
+          <div className="h-28 flex items-center justify-center text-sm text-hl-text-tertiary">
             아래에서 자산을 추가해봐 — 예금·스테이블·근로소득·펀딩파밍 뭐든
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px] font-mono">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="text-[11px] uppercase tracking-wider text-hl-text-tertiary">
-                  <th className="text-left px-4 py-2 font-medium">이름</th>
-                  <th className="text-left px-2 py-2 font-medium">유형</th>
-                  <th className="text-right px-2 py-2 font-medium">원금</th>
-                  <th className="text-right px-2 py-2 font-medium">연이율</th>
-                  <th className="text-right px-2 py-2 font-medium">월</th>
-                  <th className="text-right px-2 py-2 font-medium">연</th>
-                  <th className="px-4 py-2" />
+                <tr className="text-[11px] uppercase tracking-wider text-hl-text-tertiary bg-hl-bg-tertiary/40">
+                  <th className="text-left px-5 py-2.5 font-medium">이름</th>
+                  <th className="text-left px-3 py-2.5 font-medium">유형</th>
+                  <th className="text-right px-3 py-2.5 font-medium">원금</th>
+                  <th className="text-right px-3 py-2.5 font-medium">연이율</th>
+                  <th className="text-right px-3 py-2.5 font-medium">월 현금흐름</th>
+                  <th className="text-right px-3 py-2.5 font-medium">연 현금흐름</th>
+                  <th className="px-5 py-2.5" />
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className="border-t border-hl-border/50 hover:bg-hl-bg-hover transition-colors">
-                    <td className="px-4 py-2 text-hl-text-primary">
+                    <td className="px-5 py-3 text-hl-text-primary font-medium">
                       {r.name}
                       {r.auto && (
-                        <span className="ml-1.5 px-1 py-px rounded bg-hl-bg-tertiary text-[9px] text-hl-accent/80">
+                        <span className="ml-2 px-1.5 py-0.5 rounded bg-hl-accent/10 text-[10px] text-hl-accent">
                           자동
                         </span>
                       )}
                     </td>
-                    <td className="px-2 py-2 text-hl-text-tertiary">{TYPE_LABEL[r.type]}</td>
-                    <td className="px-2 py-2 text-right text-hl-text-secondary">
+                    <td className="px-3 py-3">
+                      <span className="px-2 py-0.5 rounded bg-hl-bg-tertiary text-xs text-hl-text-secondary">
+                        {TYPE_LABEL[r.type]}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono text-hl-text-primary">
                       {r.principalKrw != null && r.principalKrw > 0 ? formatKrwCompact(r.principalKrw) : "—"}
                     </td>
-                    <td className="px-2 py-2 text-right text-hl-text-secondary">
+                    <td className="px-3 py-3 text-right font-mono text-hl-accent">
                       {r.aprPct != null ? `${r.aprPct.toFixed(1)}%` : "—"}
                     </td>
-                    <td className={`px-2 py-2 text-right ${r.monthlyKrw != null ? pnlColor(r.monthlyKrw) : "text-hl-text-tertiary"}`}>
+                    <td className={`px-3 py-3 text-right font-mono font-semibold ${r.monthlyKrw != null ? pnlColor(r.monthlyKrw) : "text-hl-text-tertiary"}`}>
                       {r.monthlyKrw != null ? formatKrwCompact(r.monthlyKrw) : "—"}
                     </td>
-                    <td className={`px-2 py-2 text-right ${r.yearlyKrw != null ? pnlColor(r.yearlyKrw) : "text-hl-text-tertiary"}`}>
+                    <td className={`px-3 py-3 text-right font-mono ${r.yearlyKrw != null ? pnlColor(r.yearlyKrw) : "text-hl-text-tertiary"}`}>
                       {r.yearlyKrw != null ? formatKrwCompact(r.yearlyKrw) : "—"}
                     </td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-5 py-3 text-right">
                       <button
                         onClick={() => { removePortfolioItem(r.id, profileId); setVersion((v) => v + 1); }}
                         className="text-hl-text-tertiary hover:text-hl-red transition-colors"
@@ -334,15 +339,15 @@ export default function PortfolioPage() {
       </div>
 
       {/* 추가 폼 */}
-      <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-hl-text-tertiary">유형</span>
-          <div className="flex rounded overflow-hidden border border-hl-border">
+      <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-hl-border flex items-center justify-between">
+          <h3 className="text-base font-semibold text-hl-text-primary">자산 추가</h3>
+          <div className="flex rounded-lg overflow-hidden border border-hl-border text-sm">
             {(Object.keys(TYPE_LABEL) as PortfolioItemType[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setFormType(t)}
-                className={`px-2.5 py-1 ${formType === t ? "bg-hl-accent/20 text-hl-accent" : "text-hl-text-secondary hover:bg-hl-bg-hover"}`}
+                className={`px-4 py-1.5 font-medium transition-colors ${formType === t ? "bg-hl-accent/20 text-hl-accent" : "text-hl-text-secondary hover:bg-hl-bg-hover"}`}
               >
                 {TYPE_LABEL[t]}
               </button>
@@ -350,110 +355,135 @@ export default function PortfolioPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="p-5 flex flex-wrap items-end gap-4">
           {formType !== "funding" && (
             <>
-              <input
-                placeholder="이름 (예: 파킹통장, 월급)"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className={`${inputCls} w-44`}
-              />
-              <div className="flex rounded overflow-hidden border border-hl-border">
-                {(["KRW", "USD"] as const).map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setCurrency(c)}
-                    className={`px-2 py-1 ${currency === c ? "bg-hl-accent/20 text-hl-accent" : "text-hl-text-secondary hover:bg-hl-bg-hover"}`}
-                  >
-                    {c === "KRW" ? "₩" : "$"}
-                  </button>
-                ))}
+              <div className="flex-1 min-w-48">
+                <label className={fieldLabelCls}>이름</label>
+                <input
+                  placeholder={formType === "interest" ? "예: 파킹통장, USDC 예치" : "예: 월급, 상가 월세"}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className={`${inputCls} w-full`}
+                />
+              </div>
+              <div>
+                <label className={fieldLabelCls}>통화</label>
+                <div className="flex rounded-lg overflow-hidden border border-hl-border text-sm">
+                  {(["KRW", "USD"] as const).map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setCurrency(c)}
+                      className={`px-4 py-2.5 font-mono transition-colors ${currency === c ? "bg-hl-accent/20 text-hl-accent" : "text-hl-text-secondary hover:bg-hl-bg-hover"}`}
+                    >
+                      {c === "KRW" ? "₩" : "$"}
+                    </button>
+                  ))}
+                </div>
               </div>
             </>
           )}
 
           {formType === "interest" && (
             <>
-              <input
-                inputMode="decimal"
-                placeholder="원금"
-                value={principalRaw}
-                onChange={(e) => setPrincipalRaw(groupDigits(e.target.value.replace(/[^0-9.]/g, "")))}
-                className={`${inputCls} w-36 text-right`}
-              />
-              <input
-                inputMode="decimal"
-                placeholder="연이율 %"
-                value={aprRaw}
-                onChange={(e) => setAprRaw(e.target.value.replace(/[^0-9.]/g, ""))}
-                className={`${inputCls} w-24 text-right`}
-              />
-              <select
-                onChange={(e) => {
-                  const a = symbolAprs[e.target.value];
-                  if (a != null && Number.isFinite(a)) setAprRaw(a.toFixed(1));
-                }}
-                defaultValue=""
-                className={`${inputCls}`}
-              >
-                <option value="" disabled>종목 APR 불러오기</option>
-                {symbols.map((t) => (
-                  <option key={t.hlSymbol} value={t.hlSymbol}>
-                    {t.krName} {symbolAprs[t.hlSymbol] != null ? `${symbolAprs[t.hlSymbol].toFixed(1)}%` : ""}
-                  </option>
-                ))}
-              </select>
+              <div>
+                <label className={fieldLabelCls}>원금</label>
+                <input
+                  inputMode="decimal"
+                  placeholder="300,000,000"
+                  value={principalRaw}
+                  onChange={(e) => setPrincipalRaw(groupDigits(e.target.value.replace(/[^0-9.]/g, "")))}
+                  className={`${inputCls} w-44 text-right`}
+                />
+              </div>
+              <div>
+                <label className={fieldLabelCls}>연이율 %</label>
+                <input
+                  inputMode="decimal"
+                  placeholder="3.5"
+                  value={aprRaw}
+                  onChange={(e) => setAprRaw(e.target.value.replace(/[^0-9.]/g, ""))}
+                  className={`${inputCls} w-28 text-right`}
+                />
+              </div>
+              <div>
+                <label className={fieldLabelCls}>종목 APR 불러오기</label>
+                <select
+                  onChange={(e) => {
+                    const a = symbolAprs[e.target.value];
+                    if (a != null && Number.isFinite(a)) setAprRaw(a.toFixed(1));
+                  }}
+                  defaultValue=""
+                  className={`${inputCls} min-w-44`}
+                >
+                  <option value="" disabled>선택…</option>
+                  {symbols.map((t) => (
+                    <option key={t.hlSymbol} value={t.hlSymbol}>
+                      {t.krName} {symbolAprs[t.hlSymbol] != null ? `${symbolAprs[t.hlSymbol].toFixed(1)}%` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </>
           )}
 
           {formType === "income" && (
             <>
-              <input
-                inputMode="decimal"
-                placeholder="월 금액"
-                value={monthlyRaw}
-                onChange={(e) => setMonthlyRaw(groupDigits(e.target.value.replace(/[^0-9.]/g, "")))}
-                className={`${inputCls} w-36 text-right`}
-              />
-              <input
-                inputMode="decimal"
-                placeholder="원금 (선택 — 부동산 투자금 등)"
-                value={principalRaw}
-                onChange={(e) => setPrincipalRaw(groupDigits(e.target.value.replace(/[^0-9.]/g, "")))}
-                className={`${inputCls} w-56 text-right`}
-              />
+              <div>
+                <label className={fieldLabelCls}>월 금액</label>
+                <input
+                  inputMode="decimal"
+                  placeholder="3,000,000"
+                  value={monthlyRaw}
+                  onChange={(e) => setMonthlyRaw(groupDigits(e.target.value.replace(/[^0-9.]/g, "")))}
+                  className={`${inputCls} w-44 text-right`}
+                />
+              </div>
+              <div>
+                <label className={fieldLabelCls}>원금 · 선택 (부동산 투자금 등)</label>
+                <input
+                  inputMode="decimal"
+                  placeholder="비워도 됨"
+                  value={principalRaw}
+                  onChange={(e) => setPrincipalRaw(groupDigits(e.target.value.replace(/[^0-9.]/g, "")))}
+                  className={`${inputCls} w-52 text-right`}
+                />
+              </div>
             </>
           )}
 
           {formType === "funding" && (
             <>
-              <span className="text-hl-text-tertiary">
-                투입자본(HL 예치금+현물 원금)과 예상 APR을 실시간으로 가져와
+              <div className="flex-1 min-w-64 text-sm text-hl-text-secondary leading-relaxed">
+                투입자본(HL 예치금 + 현물 원금)과 예상 APR을 실시간으로 가져와.
                 {fundingCtx != null && (
-                  <span className="ml-1 text-hl-text-secondary">
-                    — 지금 {formatUsd(fundingCtx.capitalUsd)} × {fundingCtx.aprPct.toFixed(1)}%
-                  </span>
+                  <div className="mt-1 font-mono text-hl-text-primary">
+                    지금 <span className="text-hl-accent">{formatUsd(fundingCtx.capitalUsd)}</span> ×{" "}
+                    <span className="text-hl-accent">{fundingCtx.aprPct.toFixed(1)}%</span>
+                  </div>
                 )}
-              </span>
-              <input
-                inputMode="decimal"
-                placeholder="이율 고정 (선택)"
-                value={aprRaw}
-                onChange={(e) => setAprRaw(e.target.value.replace(/[^0-9.]/g, ""))}
-                className={`${inputCls} w-32 text-right`}
-              />
-              {hasFundingItem && (
-                <span className="text-hl-yellow/80">이미 펀딩파밍 항목이 있어 — 중복 추가 주의</span>
-              )}
+                {hasFundingItem && (
+                  <div className="mt-1 text-hl-yellow/80">이미 펀딩파밍 항목이 있어 — 중복 추가 주의</div>
+                )}
+              </div>
+              <div>
+                <label className={fieldLabelCls}>이율 고정 % · 선택</label>
+                <input
+                  inputMode="decimal"
+                  placeholder="비우면 라이브"
+                  value={aprRaw}
+                  onChange={(e) => setAprRaw(e.target.value.replace(/[^0-9.]/g, ""))}
+                  className={`${inputCls} w-36 text-right`}
+                />
+              </div>
             </>
           )}
 
           <button
             onClick={submit}
-            className="px-3 py-1 rounded bg-hl-accent/20 text-hl-accent hover:bg-hl-accent/30 transition-colors"
+            className="px-6 py-2.5 rounded-lg bg-hl-accent/20 text-hl-accent text-sm font-semibold hover:bg-hl-accent/30 transition-colors"
           >
-            추가
+            + 추가
           </button>
         </div>
       </div>
