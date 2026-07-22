@@ -13,9 +13,15 @@ function timeLabel(ts: number): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:00`;
 }
 
+const INITIAL_VISIBLE = 10;
+const LOAD_MORE_STEP = 50;
+
 export default function HourlyTable({ events }: Props) {
   const [view, setView] = useState<"list" | "chart">("list");
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const desc = useMemo(() => [...events].reverse(), [events]);
+  const visible = desc.slice(0, visibleCount);
+  const hidden = desc.length - visible.length;
   const chartEvents = useMemo(
     () => events.map((e) => ({ time: e.time, usdc: e.usdc })),
     [events]
@@ -52,8 +58,8 @@ export default function HourlyTable({ events }: Props) {
           <FundingHistoryChart events={chartEvents} />
         </div>
       ) : (
-        /* 10행 정도만 보이고 나머지는 내부 스크롤 */
-        <div className="max-h-[340px] overflow-y-auto">
+        /* 기본 10건 + 더보기. 많이 펼치면 내부 스크롤로 전환 */
+        <div className="max-h-[560px] overflow-y-auto">
           <table className="w-full text-[13px] font-mono">
             <thead className="sticky top-0 bg-hl-bg-secondary">
               <tr className="text-[10px] uppercase tracking-wider text-hl-text-tertiary">
@@ -64,7 +70,7 @@ export default function HourlyTable({ events }: Props) {
               </tr>
             </thead>
             <tbody>
-              {desc.map((e) => (
+              {visible.map((e) => (
                 <tr
                   key={`${e.time}-${e.coin}-${e.pairId}`}
                   className="border-t border-hl-border/50 hover:bg-hl-bg-hover transition-colors"
@@ -91,6 +97,22 @@ export default function HourlyTable({ events }: Props) {
             </tbody>
           </table>
         </div>
+      )}
+      {view === "list" && hidden > 0 && (
+        <button
+          onClick={() => setVisibleCount((n) => n + LOAD_MORE_STEP)}
+          className="w-full py-2 text-[11px] text-hl-text-secondary hover:text-hl-accent border-t border-hl-border transition-colors"
+        >
+          더보기 ({hidden}건 더)
+        </button>
+      )}
+      {view === "list" && hidden === 0 && desc.length > INITIAL_VISIBLE && (
+        <button
+          onClick={() => setVisibleCount(INITIAL_VISIBLE)}
+          className="w-full py-2 text-[11px] text-hl-text-secondary hover:text-hl-accent border-t border-hl-border transition-colors"
+        >
+          접기
+        </button>
       )}
     </div>
   );

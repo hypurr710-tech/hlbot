@@ -177,7 +177,7 @@ export default function ArbHistoryPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         <PeriodTable title="월별 기록" rows={monthlyRows} period="month" defaultVisible={12} aprReliable={reliable} />
-        <PeriodTable title="일별 기록" rows={dailyRows} period="day" defaultVisible={14} aprReliable={reliable} />
+        <PeriodTable title="일별 기록" rows={dailyRows} period="day" defaultVisible={10} aprReliable={reliable} />
       </div>
 
       <HourlyTable events={events} />
