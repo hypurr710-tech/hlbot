@@ -55,7 +55,7 @@ export default function ArbPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div>
           <h1 className="text-xl md:text-2xl font-semibold text-hl-text-primary">
             Funding Arbitrage

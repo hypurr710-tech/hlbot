@@ -35,12 +35,40 @@
   scrollbar-color: var(--color-hl-border) transparent;
 }
 
+html {
+  /* 모바일 회전/스크롤 시 브라우저의 임의 글자 확대 방지 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   background: var(--color-hl-bg-primary);
   color: var(--color-hl-text-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 좁은 화면에서 튀어나온 요소가 가로 팬/확대처럼 보이는 것 차단 */
+  overflow-x: clip;
+}
+
+/* 더블탭 확대 제스처 차단 — 탭 반응도 빨라짐 */
+a,
+button,
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
+/* iOS는 16px 미만 입력 필드에 포커스가 가면 페이지를 강제 확대한다.
+ * 모바일에서만 폼 컨트롤을 16px로 올려 확대 자체를 막는다. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 /* Subtle radial glow background */

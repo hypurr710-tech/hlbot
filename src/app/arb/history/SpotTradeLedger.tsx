@@ -205,7 +205,8 @@ export default function SpotTradeLedger({ snapshot, onChange }: Props) {
           기록 없음 — 매수/매도를 입력하면 평단·평가손익이 자동 계산돼
         </div>
       ) : (
-        <table className="w-full text-xs font-mono">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-xs font-mono">
           <thead>
             <tr className="text-[10px] uppercase tracking-wider text-hl-text-tertiary">
               <th className="text-left px-4 py-2 font-medium">날짜</th>
@@ -247,6 +248,7 @@ export default function SpotTradeLedger({ snapshot, onChange }: Props) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

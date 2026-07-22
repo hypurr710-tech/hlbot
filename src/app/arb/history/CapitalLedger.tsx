@@ -220,7 +220,8 @@ export default function CapitalLedger({ addresses, onChange }: Props) {
           {autoLoading ? "HL 온체인 입출금 조회 중…" : "기록 없음"}
         </div>
       ) : (
-        <table className="w-full text-xs font-mono">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[440px] text-xs font-mono">
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-t border-hl-border/50 hover:bg-hl-bg-hover transition-colors">
@@ -252,6 +253,7 @@ export default function CapitalLedger({ addresses, onChange }: Props) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

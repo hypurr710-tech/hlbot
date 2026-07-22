@@ -52,7 +52,7 @@ export default function PairEditModal({ hlAddress, hlSymbol, initial, initialOpe
       <div
         role="dialog"
         aria-modal="true"
-        className="bg-hl-bg-secondary border border-hl-border rounded-xl p-6 w-full max-w-md space-y-4"
+        className="bg-hl-bg-secondary border border-hl-border rounded-xl p-6 w-full max-w-md space-y-4 max-h-[85dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div>

@@ -137,7 +137,13 @@ export default function StatGrid({
         <StatCard
           title="현물 원금"
           value={formatKrwCompact(spotPrincipalKrw)}
-          subtitle={spotPrincipalUsd != null ? formatUsd(spotPrincipalUsd) : "환율 대기"}
+          subtitle={
+            spotPrincipalKrw === 0
+              ? "장부 기록 없음 — 다른 기기에서 입력했다면 기기 동기화"
+              : spotPrincipalUsd != null
+                ? formatUsd(spotPrincipalUsd)
+                : "환율 대기"
+          }
           loading={loading}
         />
         <StatCard
