@@ -298,3 +298,53 @@ describe("arb.aggregateFundingByPeriod", () => {
     expect(buckets[1].ts).toBeLessThan(buckets[2].ts);
   });
 });
+
+import { buildPeriodRows } from "@/lib/arb";
+
+describe("arb.buildPeriodRows", () => {
+  // 2026-07-20 00:00 로컬 기준 완결된 하루
+  const day20 = new Date(2026, 6, 20).getTime();
+  const day21 = new Date(2026, 6, 21).getTime();
+  const buckets: FundingBucket[] = [
+    { key: "2026-07-20", ts: day20, usdc: 24, count: 24 },
+    { key: "2026-07-21", ts: day21, usdc: 6, count: 6 },
+  ];
+  // "지금"은 7/21 06:00 → 7/21은 6시간만 경과한 진행 중 구간
+  const now = new Date(2026, 6, 21, 6).getTime();
+  const capital = 100_000;
+
+  it("완결된 일 구간은 24h로 연환산", () => {
+    const rows = buildPeriodRows(buckets, "day", capital, now);
+    const r = rows.find((x) => x.key === "2026-07-20")!;
+    expect(r.hoursCovered).toBe(24);
+    expect(r.returnPct).toBeCloseTo(0.024, 5); // 24/100000×100
+    // APR = 0.024% × (8760/24) = 8.76%
+    expect(r.aprPct).toBeCloseTo(8.76, 2);
+  });
+
+  it("진행 중 일 구간은 경과 시간으로 연환산", () => {
+    const rows = buildPeriodRows(buckets, "day", capital, now);
+    const r = rows.find((x) => x.key === "2026-07-21")!;
+    expect(r.hoursCovered).toBeCloseTo(6, 5);
+    // 6/100000×100 = 0.006% → ×(8760/6) = 8.76%
+    expect(r.aprPct).toBeCloseTo(8.76, 2);
+  });
+
+  it("월 구간은 해당 월의 일수를 반영", () => {
+    const jun = new Date(2026, 5, 1).getTime(); // 6월 = 30일
+    const rows = buildPeriodRows(
+      [{ key: "2026-06", ts: jun, usdc: 720, count: 720 }],
+      "month",
+      capital,
+      now
+    );
+    expect(rows[0].hoursCovered).toBe(720); // 30일 × 24h (완결)
+    expect(rows[0].aprPct).toBeCloseTo((720 / capital) * 100 * (8760 / 720), 2);
+  });
+
+  it("capital이 0이면 수익률/APR 0", () => {
+    const rows = buildPeriodRows(buckets, "day", 0, now);
+    expect(rows[0].returnPct).toBe(0);
+    expect(rows[0].aprPct).toBe(0);
+  });
+});
