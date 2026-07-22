@@ -223,3 +223,43 @@ export function calcRecentAprPct(args: {
 export function isAprReliable(elapsedHours: number, settlementCount: number): boolean {
   return elapsedHours >= 24 && settlementCount >= 3;
 }
+
+/** 구간(일/월) 기록 테이블 행: 펀딩피 + 수익률 + 연 APR. */
+export interface PeriodRow extends FundingBucket {
+  returnPct: number;
+  aprPct: number;
+  hoursCovered: number;
+}
+
+/** 버킷의 전체 시간(ms). hour=1h, day=24h, month=해당 월 일수×24h. */
+function bucketSpanMs(ts: number, period: FundingPeriod): number {
+  if (period === "hour") return 3600000;
+  if (period === "day") return 86400000;
+  const d = new Date(ts);
+  const days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return days * 86400000;
+}
+
+/**
+ * 구간별 수익률·연 APR 행을 만든다. 진행 중인 구간(now가 구간 안)은
+ * 경과 시간만으로 연환산해 이른 시점의 값이 희석/과장되지 않게 한다.
+ * 분모는 "현재 자본" — 시점별 자본 재구성은 하지 않는다(스펙에 명시된 단순화).
+ */
+export function buildPeriodRows(
+  buckets: FundingBucket[],
+  period: FundingPeriod,
+  capitalUsd: number,
+  nowMs: number
+): PeriodRow[] {
+  return buckets.map((b) => {
+    const spanMs = bucketSpanMs(b.ts, period);
+    const coveredMs = Math.max(0, Math.min(nowMs - b.ts, spanMs));
+    const hoursCovered = coveredMs / 3600000;
+    if (capitalUsd <= 0 || hoursCovered <= 0) {
+      return { ...b, returnPct: 0, aprPct: 0, hoursCovered };
+    }
+    const returnPct = (b.usdc / capitalUsd) * 100;
+    const aprPct = returnPct * (8760 / hoursCovered);
+    return { ...b, returnPct, aprPct, hoursCovered };
+  });
+}

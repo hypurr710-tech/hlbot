@@ -62,6 +62,25 @@ const navItems = [
     ),
   },
   {
+    href: "/arb/history",
+    label: "Funding 기록",
+    icon: (
+      <svg
+        className="w-[18px] h-[18px]"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={1.5}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
+      </svg>
+    ),
+  },
+  {
     href: "/premium",
     label: "Premium",
     icon: (
@@ -178,10 +197,12 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         <nav className="flex-1 py-4 px-2">
           <ul className="space-y-0.5">
             {navItems.map((item) => {
+              // 최장 매칭 href만 활성 — /arb/history에서 /arb가 같이 켜지지 않게.
+              const matches = (href: string) =>
+                href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
               const isActive =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
+                matches(item.href) &&
+                !navItems.some((o) => o.href.length > item.href.length && matches(o.href));
               return (
                 <li key={item.href}>
                   <Link
