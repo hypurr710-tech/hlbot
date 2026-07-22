@@ -49,3 +49,18 @@ export function pnlColor(value: number): string {
   if (value < 0) return "text-hl-red";
   return "text-hl-text-secondary";
 }
+
+/** 원화를 억/만원 단위로 축약 표기. 예: 2.5억, 3,500만, 9,000원 미만은 그대로. */
+export function formatKrwCompact(valueKrw: number): string {
+  const sign = valueKrw < 0 ? "-" : "";
+  const abs = Math.abs(valueKrw);
+  if (abs >= 100_000_000) {
+    const eok = abs / 100_000_000;
+    const s = eok >= 10 ? Math.round(eok).toLocaleString("en-US") : String(Math.round(eok * 10) / 10);
+    return `${sign}₩${s}억`;
+  }
+  if (abs >= 10_000) {
+    return `${sign}₩${Math.round(abs / 10_000).toLocaleString("en-US")}만`;
+  }
+  return `${sign}₩${Math.round(abs).toLocaleString("en-US")}`;
+}
