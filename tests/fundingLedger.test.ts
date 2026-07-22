@@ -74,3 +74,35 @@ describe("fundingLedger.calcLedgerStats", () => {
     expect(stats.firstOpenedAt).toBeNull();
   });
 });
+
+import { collectWalletEvents } from "@/lib/fundingLedger";
+
+describe("fundingLedger.collectWalletEvents", () => {
+  it("페어 없이도 지갑의 xyz 이벤트를 전부 모으고 표준 perp는 제외한다", () => {
+    const funding = {
+      "0xabc": [fev(T0 + H, "1"), fev(T0 + 2 * H, "2", "xyz:SDNS"), fev(T0 + 3 * H, "9", "BTC")],
+      "0xdef": [fev(T0 + H, "4")],
+    };
+    const events = collectWalletEvents(funding);
+    expect(events).toHaveLength(3); // BTC 제외, 지갑별 dedupe 키 분리
+    expect(events.map((e) => e.coin).sort()).toEqual(["SDNS", "SKHX", "SKHX"]);
+    expect(events.reduce((s, e) => s + e.usdc, 0)).toBe(7);
+    expect(events[0].time).toBeLessThanOrEqual(events[events.length - 1].time);
+  });
+
+  it("같은 지갑의 중복 이벤트는 한 번만 센다", () => {
+    const events = collectWalletEvents({ "0xabc": [fev(T0 + H, "1"), fev(T0 + H, "1")] });
+    expect(events).toHaveLength(1);
+  });
+});
+
+describe("fundingLedger.calcLedgerStats — 페어 미등록 fallback", () => {
+  it("페어가 없으면 첫 이벤트 시각을 시작점으로 쓴다", () => {
+    const evs: LedgerEvent[] = [
+      { time: T0 + H, coin: "SKHX", usdc: 1, rate: 0.0001, nSamples: 1, pairId: "0xabc" },
+    ];
+    const stats = calcLedgerStats(evs, [], T0 + 25 * H);
+    expect(stats.firstOpenedAt).toBe(T0 + H);
+    expect(stats.elapsedDays).toBeCloseTo(1, 3);
+  });
+});

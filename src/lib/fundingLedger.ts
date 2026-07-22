@@ -57,10 +57,39 @@ export interface LedgerStats {
   lastHourTime: number | null;
 }
 
-/** 스탯 카드용 집계. 직전 펀비는 "가장 최근 정산이 속한 1시간 버킷"의 합. */
+/** Addresses 지갑 전체의 xyz(국내주식 perp) 펀딩 이벤트 — 페어 등록 없이도 기록에 포함.
+ *  표시용 pairId 자리에는 지갑 주소를 넣는다 (테이블 행 key로만 쓰임). */
+export function collectWalletEvents(
+  fundingByAddress: Record<string, FundingEvent[]>
+): LedgerEvent[] {
+  const seen = new Set<string>();
+  const out: LedgerEvent[] = [];
+  for (const [addr, walletEvents] of Object.entries(fundingByAddress)) {
+    for (const e of walletEvents) {
+      if (!e.delta.coin.startsWith("xyz:")) continue;
+      const coin = e.delta.coin.slice("xyz:".length);
+      const key = `${addr}|${e.time}|${coin}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        time: e.time,
+        coin,
+        usdc: parseFloat(e.delta.usdc),
+        rate: parseFloat(e.delta.fundingRate),
+        nSamples: e.delta.nSamples ?? 1,
+        pairId: addr,
+      });
+    }
+  }
+  return out.sort((a, b) => a.time - b.time);
+}
+
+/** 스탯 카드용 집계. 직전 펀비는 "가장 최근 정산이 속한 1시간 버킷"의 합.
+ *  시작점은 페어 오픈 시각과 첫 정산 이벤트 중 더 이른 쪽 — 페어 미등록 지갑도 커버. */
 export function calcLedgerStats(events: LedgerEvent[], pairs: ArbPair[], nowMs: number): LedgerStats {
-  const opened = pairs.map(pairOpenedAt);
-  const firstOpenedAt = opened.length ? Math.min(...opened) : null;
+  const candidates = pairs.map(pairOpenedAt);
+  if (events.length > 0) candidates.push(events[0].time);
+  const firstOpenedAt = candidates.length ? Math.min(...candidates) : null;
   const elapsedDays = firstOpenedAt != null ? Math.max(0, nowMs - firstOpenedAt) / 86400000 : 0;
 
   let totalUsdc = 0;

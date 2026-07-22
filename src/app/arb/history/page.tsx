@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useLiveSnapshot } from "../useLiveSnapshot";
 import { useHlXyzShorts } from "../useHlXyzShorts";
 import { useArbPairs } from "@/hooks/useArbPairs";
+import { useAddresses } from "@/lib/store";
 import { fetchFundingWithCache } from "../useFundingHistory";
 import { useHlEquity } from "./useHlEquity";
 import type { FundingEvent } from "@/lib/hyperliquid";
-import { collectPairEvents, calcLedgerStats } from "@/lib/fundingLedger";
+import { collectWalletEvents, calcLedgerStats } from "@/lib/fundingLedger";
 import { aggregateFundingByPeriod, buildPeriodRows, isAprReliable } from "@/lib/arb";
 import { loadCapitalEvents, capitalAdjustmentUsd } from "@/lib/capitalStore";
 import { useAprBasis } from "@/lib/aprBasis";
@@ -20,12 +21,19 @@ export default function ArbHistoryPage() {
   const { snapshot } = useLiveSnapshot();
   const shorts = useHlXyzShorts();
   const { pairs } = useArbPairs(); // 청산 포함 전체 — 기록 페이지
+  const { addresses: trackedAddresses } = useAddresses();
   const { basis } = useAprBasis();
 
-  // 청산 페어 포함 모든 지갑의 펀딩 이력
+  // Addresses 탭 지갑 ∪ 페어 지갑 — 페어 등록 없이도 지갑 펀딩 이력을 집계
   const addresses = useMemo(
-    () => Array.from(new Set(pairs.map((p) => p.hlAddress.toLowerCase()))).sort(),
-    [pairs]
+    () =>
+      Array.from(
+        new Set([
+          ...trackedAddresses.map((a) => a.address.toLowerCase()),
+          ...pairs.map((p) => p.hlAddress.toLowerCase()),
+        ])
+      ).sort(),
+    [trackedAddresses, pairs]
   );
   const addressesKey = addresses.join(",");
   const [fundingByAddress, setFundingByAddress] = useState<Record<string, FundingEvent[]>>({});
@@ -58,19 +66,15 @@ export default function ArbHistoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addressesKey]);
 
-  // 활성 페어 지갑만 예치금 폴링 (청산 지갑은 자본에서 제외)
+  // 전체 지갑 예치금 폴링 (Addresses ∪ 페어 지갑)
   const activePairs = useMemo(() => pairs.filter((p) => !p.closedAt), [pairs]);
-  const activeAddresses = useMemo(
-    () => Array.from(new Set(activePairs.map((p) => p.hlAddress.toLowerCase()))).sort(),
-    [activePairs]
-  );
-  const { totalEquityUsd, loading: equityLoading } = useHlEquity(activeAddresses);
+  const { totalEquityUsd, loading: equityLoading } = useHlEquity(addresses);
 
   const now = Date.now();
+  // 지갑 기준 수집 — 페어 등록 없이도 xyz 펀딩 이벤트 전부 포함
   const events = useMemo(
-    () => collectPairEvents(pairs, fundingByAddress, now),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pairs, fundingByAddress]
+    () => collectWalletEvents(fundingByAddress),
+    [fundingByAddress]
   );
   const stats = useMemo(
     () => calcLedgerStats(events, pairs, now),
@@ -78,22 +82,19 @@ export default function ArbHistoryPage() {
     [events, pairs]
   );
 
-  // 다음 펀비 예상 = Σ(활성 숏 노셔널 × 현재 시간당 펀딩률)
+  // 다음 펀비 예상 = Σ(전체 지갑 숏 노셔널 × 현재 시간당 펀딩률) — 페어 등록 불필요
   const nextFundingUsd = useMemo(() => {
     if (!snapshot) return null;
     let sum = 0;
     let any = false;
-    for (const p of activePairs) {
-      const s = shorts.find(
-        (x) => x.hlAddress.toLowerCase() === p.hlAddress.toLowerCase() && x.hlSymbol === p.hlSymbol
-      );
-      const hl = snapshot.hl[p.hlSymbol];
-      if (!s || !hl) continue;
+    for (const s of shorts) {
+      const hl = snapshot.hl[s.hlSymbol];
+      if (!hl) continue;
       any = true;
       sum += s.sizeAbs * hl.markPx * hl.fundingHourly;
     }
     return any ? sum : null;
-  }, [snapshot, shorts, activePairs]);
+  }, [snapshot, shorts]);
 
   // 자본 (기준 토글 반영) — 테이블 수익률 분모
   const [capitalVersion, setCapitalVersion] = useState(0);
