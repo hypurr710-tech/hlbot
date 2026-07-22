@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calcPremiumPct, hlPriceKrw } from "@/lib/arb";
+import { calcPremiumPct, hlPriceKrw, buildPeriodRows, type FundingBucket } from "@/lib/arb";
 
 describe("arb.calcPremiumPct", () => {
   it("computes positive premium when HL is more expensive than KRX", () => {
@@ -298,8 +298,6 @@ describe("arb.aggregateFundingByPeriod", () => {
     expect(buckets[1].ts).toBeLessThan(buckets[2].ts);
   });
 });
-
-import { buildPeriodRows } from "@/lib/arb";
 
 describe("arb.buildPeriodRows", () => {
   // 2026-07-20 00:00 로컬 기준 완결된 하루
