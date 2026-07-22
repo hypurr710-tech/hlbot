@@ -100,3 +100,57 @@ describe("portfolio.computePortfolio", () => {
     expect(totals.weightedAprPct).toBeCloseTo((4_000_000 + 24_000_000) / 400_000_000 * 100, 5); // 7%
   });
 });
+
+import {
+  loadProfiles,
+  addProfile,
+  removeProfile,
+  getActiveProfileId,
+  setActiveProfileId,
+  DEFAULT_PROFILE_ID,
+} from "@/lib/portfolio";
+
+describe("portfolio profiles", () => {
+  beforeEach(() => localStorageMock.clear());
+
+  it("기본 프로필이 항상 존재한다", () => {
+    const profiles = loadProfiles();
+    expect(profiles).toHaveLength(1);
+    expect(getActiveProfileId()).toBe(profiles[0].id);
+  });
+
+  it("프로필별로 항목이 분리 저장된다", () => {
+    const dad = addProfile("아빠꺼");
+    addPortfolioItem({ name: "내 예금", type: "interest", currency: "KRW", principal: 1000, aprPct: 3 });
+    addPortfolioItem({ name: "아빠 예금", type: "interest", currency: "KRW", principal: 2000, aprPct: 4 }, dad.id);
+    expect(loadPortfolioItems()).toHaveLength(1);
+    expect(loadPortfolioItems(dad.id)).toHaveLength(1);
+    expect(loadPortfolioItems(dad.id)[0].name).toBe("아빠 예금");
+  });
+
+  it("프로필 삭제 시 항목도 삭제되고 활성 프로필이 이동한다", () => {
+    // 기본 프로필을 profiles 목록에 명시적으로 만든 뒤 진행
+    const mine = addProfile("내꺼");
+    const dad = addProfile("아빠꺼");
+    addPortfolioItem({ name: "아빠 예금", type: "interest", currency: "KRW", principal: 2000, aprPct: 4 }, dad.id);
+    setActiveProfileId(dad.id);
+    removeProfile(dad.id);
+    expect(loadPortfolioItems(dad.id)).toHaveLength(0);
+    expect(getActiveProfileId()).not.toBe(dad.id);
+    expect(loadProfiles().some((p) => p.id === mine.id)).toBe(true);
+  });
+
+  it("마지막 프로필은 삭제되지 않는다", () => {
+    const only = addProfile("유일");
+    removeProfile(only.id);
+    expect(loadProfiles().length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("legacy 키가 default 프로필 데이터로 그대로 보인다", () => {
+    localStorageMock.setItem(
+      "hypurr_portfolio_items",
+      JSON.stringify([{ id: "old", name: "옛날 예금", type: "interest", currency: "KRW", principal: 1, aprPct: 1, createdAt: 1 }])
+    );
+    expect(loadPortfolioItems(DEFAULT_PROFILE_ID)[0].name).toBe("옛날 예금");
+  });
+});

@@ -14,7 +14,12 @@ import {
   addPortfolioItem,
   removePortfolioItem,
   computePortfolio,
-  type PortfolioItem,
+  loadProfiles,
+  addProfile,
+  removeProfile,
+  getActiveProfileId,
+  setActiveProfileId,
+  type PortfolioProfile,
   type PortfolioItemType,
 } from "@/lib/portfolio";
 import { formatKrwCompact, formatUsd, groupDigits, pnlColor } from "@/lib/format";
@@ -50,7 +55,38 @@ export default function PortfolioPage() {
   const { totalEquityUsd } = useHlEquity(addresses);
 
   const [version, setVersion] = useState(0);
-  const items = useMemo(() => loadPortfolioItems(), [version]);
+  const [profiles, setProfiles] = useState<PortfolioProfile[]>([]);
+  const [profileId, setProfileId] = useState<string>("default");
+  const [newProfileName, setNewProfileName] = useState("");
+
+  useEffect(() => {
+    setProfiles(loadProfiles());
+    setProfileId(getActiveProfileId());
+  }, []);
+
+  const switchProfile = (id: string) => {
+    setActiveProfileId(id);
+    setProfileId(id);
+    setVersion((v) => v + 1);
+  };
+
+  const createProfile = () => {
+    const name = newProfileName.trim();
+    if (!name) return;
+    const p = addProfile(name);
+    setProfiles(loadProfiles());
+    setNewProfileName("");
+    switchProfile(p.id);
+  };
+
+  const deleteProfile = (id: string) => {
+    removeProfile(id);
+    const rest = loadProfiles();
+    setProfiles(rest);
+    switchProfile(getActiveProfileId());
+  };
+
+  const items = useMemo(() => loadPortfolioItems(profileId), [profileId, version]);
 
   const usdKrw = snapshot?.fx.usdKrwHana ?? null;
 
@@ -123,19 +159,19 @@ export default function PortfolioPage() {
         type: "funding",
         currency: "USD",
         aprPct: num(aprRaw), // 비우면 라이브 APR
-      });
+      }, profileId);
     } else if (formType === "interest") {
       const principal = num(principalRaw);
       const aprPct = num(aprRaw);
       if (!name.trim() || principal == null || principal <= 0 || aprPct == null) return;
-      addPortfolioItem({ name: name.trim(), type: "interest", currency, principal, aprPct });
+      addPortfolioItem({ name: name.trim(), type: "interest", currency, principal, aprPct }, profileId);
     } else {
       const monthlyAmount = num(monthlyRaw);
       if (!name.trim() || monthlyAmount == null || monthlyAmount <= 0) return;
       addPortfolioItem({
         name: name.trim(), type: "income", currency, monthlyAmount,
         principal: num(principalRaw),
-      });
+      }, profileId);
     }
     setName(""); setPrincipalRaw(""); setAprRaw(""); setMonthlyRaw("");
     setVersion((v) => v + 1);
@@ -147,11 +183,57 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-xl md:text-2xl font-semibold text-hl-text-primary">Portfolio</h1>
-        <p className="text-xs md:text-sm text-hl-text-secondary mt-1">
-          자산별 이자율·현금흐름을 등록해 포트폴리오 전체의 수익 구조를 추적합니다 (세전)
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl md:text-2xl font-semibold text-hl-text-primary">Portfolio</h1>
+          <p className="text-xs md:text-sm text-hl-text-secondary mt-1">
+            자산별 이자율·현금흐름을 등록해 포트폴리오 전체의 수익 구조를 추적합니다 (세전)
+          </p>
+        </div>
+        {/* 프로필 전환 (내꺼/아빠꺼 등) — 프로필별로 항목이 분리 저장됨 */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          {profiles.map((p) => (
+            <span
+              key={p.id}
+              className={`flex items-center rounded-lg overflow-hidden border ${
+                profileId === p.id ? "border-hl-accent/60" : "border-hl-border"
+              }`}
+            >
+              <button
+                onClick={() => switchProfile(p.id)}
+                className={`px-2.5 py-1 ${
+                  profileId === p.id
+                    ? "bg-hl-accent/20 text-hl-accent"
+                    : "text-hl-text-secondary hover:bg-hl-bg-hover"
+                }`}
+              >
+                {p.name}
+              </button>
+              {profiles.length > 1 && (
+                <button
+                  onClick={() => deleteProfile(p.id)}
+                  className="px-1.5 py-1 text-hl-text-tertiary hover:text-hl-red"
+                  title={`${p.name} 프로필 삭제 (항목도 함께 삭제)`}
+                >
+                  ✕
+                </button>
+              )}
+            </span>
+          ))}
+          <input
+            placeholder="새 프로필"
+            value={newProfileName}
+            onChange={(e) => setNewProfileName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") createProfile(); }}
+            className="w-24 bg-hl-bg-tertiary border border-hl-border rounded-lg px-2 py-1 text-hl-text-primary"
+          />
+          <button
+            onClick={createProfile}
+            className="px-2 py-1 rounded-lg bg-hl-accent/20 text-hl-accent hover:bg-hl-accent/30 transition-colors"
+          >
+            + 추가
+          </button>
+        </div>
       </div>
 
       {/* 요약 */}
@@ -236,7 +318,7 @@ export default function PortfolioPage() {
                     </td>
                     <td className="px-4 py-2 text-right">
                       <button
-                        onClick={() => { removePortfolioItem(r.id); setVersion((v) => v + 1); }}
+                        onClick={() => { removePortfolioItem(r.id, profileId); setVersion((v) => v + 1); }}
                         className="text-hl-text-tertiary hover:text-hl-red transition-colors"
                         title="삭제"
                       >

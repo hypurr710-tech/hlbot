@@ -16,39 +16,103 @@ export interface PortfolioItem {
   createdAt: number;
 }
 
-const KEY = "hypurr_portfolio_items";
+// ---- 프로필 (내꺼/아빠꺼 등 포트폴리오 여러 벌) ----
 
-function read(): PortfolioItem[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as PortfolioItem[]) : [];
-  } catch {
-    return [];
-  }
+export interface PortfolioProfile {
+  id: string;
+  name: string;
 }
 
-function write(list: PortfolioItem[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(KEY, JSON.stringify(list));
+const PROFILES_KEY = "hypurr_portfolio_profiles";
+const ACTIVE_KEY = "hypurr_portfolio_active_profile";
+/** 프로필 도입 전 데이터 — default 프로필의 저장 키로 그대로 사용 (마이그레이션 불필요) */
+const LEGACY_ITEMS_KEY = "hypurr_portfolio_items";
+export const DEFAULT_PROFILE_ID = "default";
+
+function itemsKey(profileId: string): string {
+  return profileId === DEFAULT_PROFILE_ID ? LEGACY_ITEMS_KEY : `${LEGACY_ITEMS_KEY}::${profileId}`;
 }
 
 function genId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function loadPortfolioItems(): PortfolioItem[] {
-  return read();
+export function loadProfiles(): PortfolioProfile[] {
+  if (typeof window === "undefined") return [{ id: DEFAULT_PROFILE_ID, name: "내 포트폴리오" }];
+  try {
+    const raw = localStorage.getItem(PROFILES_KEY);
+    const list = raw ? (JSON.parse(raw) as PortfolioProfile[]) : [];
+    if (list.length === 0) return [{ id: DEFAULT_PROFILE_ID, name: "내 포트폴리오" }];
+    return list;
+  } catch {
+    return [{ id: DEFAULT_PROFILE_ID, name: "내 포트폴리오" }];
+  }
 }
 
-export function addPortfolioItem(input: Omit<PortfolioItem, "id" | "createdAt">): PortfolioItem {
+function writeProfiles(list: PortfolioProfile[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(PROFILES_KEY, JSON.stringify(list));
+}
+
+export function addProfile(name: string): PortfolioProfile {
+  const p: PortfolioProfile = { id: genId(), name };
+  writeProfiles([...loadProfiles(), p]);
+  return p;
+}
+
+/** 프로필과 그 항목을 함께 삭제. 마지막 남은 프로필은 삭제 불가. */
+export function removeProfile(id: string): void {
+  const rest = loadProfiles().filter((p) => p.id !== id);
+  if (rest.length === 0) return;
+  writeProfiles(rest);
+  if (typeof window !== "undefined") localStorage.removeItem(itemsKey(id));
+  if (getActiveProfileId() === id) setActiveProfileId(rest[0].id);
+}
+
+export function getActiveProfileId(): string {
+  if (typeof window === "undefined") return DEFAULT_PROFILE_ID;
+  const id = localStorage.getItem(ACTIVE_KEY);
+  if (id && loadProfiles().some((p) => p.id === id)) return id;
+  return loadProfiles()[0]?.id ?? DEFAULT_PROFILE_ID;
+}
+
+export function setActiveProfileId(id: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(ACTIVE_KEY, id);
+}
+
+// ---- 항목 store (프로필별) ----
+
+function read(profileId: string): PortfolioItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(itemsKey(profileId));
+    return raw ? (JSON.parse(raw) as PortfolioItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function write(profileId: string, list: PortfolioItem[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(itemsKey(profileId), JSON.stringify(list));
+}
+
+export function loadPortfolioItems(profileId: string = DEFAULT_PROFILE_ID): PortfolioItem[] {
+  return read(profileId);
+}
+
+export function addPortfolioItem(
+  input: Omit<PortfolioItem, "id" | "createdAt">,
+  profileId: string = DEFAULT_PROFILE_ID
+): PortfolioItem {
   const item: PortfolioItem = { ...input, id: genId(), createdAt: Date.now() };
-  write([...read(), item]);
+  write(profileId, [...read(profileId), item]);
   return item;
 }
 
-export function removePortfolioItem(id: string): void {
-  write(read().filter((i) => i.id !== id));
+export function removePortfolioItem(id: string, profileId: string = DEFAULT_PROFILE_ID): void {
+  write(profileId, read(profileId).filter((i) => i.id !== id));
 }
 
 export interface PortfolioRow {
