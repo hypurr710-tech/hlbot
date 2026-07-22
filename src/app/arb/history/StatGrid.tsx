@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import StatCard from "@/components/StatCard";
 import type { LedgerStats } from "@/lib/fundingLedger";
-import { calcRealizedAprPct, calcTotalReturnPct, isAprReliable } from "@/lib/arb";
+import { calcRealizedAprPct, calcTotalReturnPct, calcKimchiPct, isAprReliable } from "@/lib/arb";
 import { useAprBasis, APR_BASIS_LABEL } from "@/lib/aprBasis";
 import { formatUsd, formatKrwCompact, pnlColor } from "@/lib/format";
 
@@ -153,7 +153,11 @@ export default function StatGrid({
         <StatCard
           title="적용 환율"
           value={usdKrwHana != null ? `₩${usdKrwHana.toLocaleString("ko-KR")}` : "—"}
-          subtitle="USD/KRW 하나은행"
+          subtitle={
+            usdKrwHana != null && usdtKrw != null
+              ? `하나은행 · USDT ₩${usdtKrw.toLocaleString("ko-KR")} (김프 ${calcKimchiPct(usdtKrw, usdKrwHana) >= 0 ? "+" : ""}${calcKimchiPct(usdtKrw, usdKrwHana).toFixed(2)}%)`
+              : "USD/KRW 하나은행"
+          }
           loading={loading}
         />
       </div>
