@@ -101,7 +101,7 @@ const navItems = [
   },
   {
     href: "/calculator",
-    label: "Calculator",
+    label: "Portfolio",
     icon: (
       <svg
         className="w-[18px] h-[18px]"
