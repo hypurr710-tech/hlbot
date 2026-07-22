@@ -298,6 +298,32 @@ export async function getUserFundingAll(
   return out.sort((a, b) => a.time - b.time);
 }
 
+export interface NonFundingLedgerUpdate {
+  time: number;
+  hash: string;
+  delta: {
+    /** "deposit" | "withdraw" | "accountClassTransfer" | "internalTransfer" | ... */
+    type: string;
+    usdc?: string;
+    [k: string]: unknown;
+  };
+}
+
+/** 입출금·이체 등 펀딩 외 원장 이벤트 (온체인 기록). */
+export async function getUserNonFundingLedgerUpdates(
+  user: string,
+  startTime: number,
+  endTime?: number
+): Promise<NonFundingLedgerUpdate[]> {
+  const body: Record<string, unknown> = {
+    type: "userNonFundingLedgerUpdates",
+    user,
+    startTime,
+  };
+  if (endTime !== undefined) body.endTime = endTime;
+  return (await postInfo(body)) as NonFundingLedgerUpdate[];
+}
+
 const FILLS_PAGE_LIMIT = 2000;
 
 /** Fetch fills with pagination. maxPages controls how deep to go. */

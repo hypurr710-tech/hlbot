@@ -182,7 +182,7 @@ export default function ArbHistoryPage() {
 
       <HourlyTable events={events} />
 
-      <CapitalLedger onChange={onCapitalChange} />
+      <CapitalLedger addresses={addresses} onChange={onCapitalChange} />
 
       <SpotTradeLedger snapshot={snapshot} onChange={() => setSpotVersion((v) => v + 1)} />
 
