@@ -85,7 +85,7 @@ export default function StatGrid({
         <StatCard
           title="누적 펀딩 수익"
           value={formatUsd(stats.totalUsdc)}
-          subtitle={`${fmtStartDate(stats.firstOpenedAt)} · ${Math.floor(stats.elapsedDays)}일째 · 정산 ${stats.settlementCount.toLocaleString("en-US")}회`}
+          subtitle={`${fmtStartDate(stats.firstOpenedAt)} · ${Math.floor(stats.elapsedDays) + 1}일째 · 정산 ${stats.settlementCount.toLocaleString("en-US")}회`}
           loading={loading}
         />
         <StatCard

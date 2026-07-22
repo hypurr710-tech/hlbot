@@ -121,7 +121,8 @@ export default function ArbHistoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [events, capitalForRows]
   );
-  const reliable = isAprReliable(stats.elapsedDays * 24, stats.settlementCount);
+  // 자본이 아직 로딩 중(0)이면 APR 컬럼은 — 처리해 순간적인 0% 표시를 막는다.
+  const reliable = capitalForRows > 0 && isAprReliable(stats.elapsedDays * 24, stats.settlementCount);
 
   const onCapitalChange = useCallback(() => setCapitalVersion((v) => v + 1), []);
   const loading = !snapshot && events.length === 0;
