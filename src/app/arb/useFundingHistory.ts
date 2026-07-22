@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { getUserFunding, type FundingEvent } from "@/lib/hyperliquid";
+import { getUserFundingAll, type FundingEvent } from "@/lib/hyperliquid";
 
 const ONE_YEAR_AGO = () => Date.now() - 365 * 24 * 60 * 60 * 1000;
 
@@ -20,7 +20,7 @@ export async function fetchFundingWithCache(address: string): Promise<FundingEve
   const key = address.toLowerCase();
   const hit = cache.get(key);
   if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.events;
-  const events = await getUserFunding(address, ONE_YEAR_AGO(), "xyz");
+  const events = await getUserFundingAll(address, ONE_YEAR_AGO(), "xyz");
   cache.set(key, { ts: Date.now(), events });
   return events;
 }

@@ -263,6 +263,41 @@ export async function getUserFunding(
   return (await postInfo(body)) as FundingEvent[];
 }
 
+const FUNDING_PAGE_LIMIT = 500; // userFunding 응답 상한 (HL docs)
+const FUNDING_MAX_PAGES = 12;
+
+/**
+ * userFunding 전체 이력 페이지네이션. 한 호출당 최대 500건이므로
+ * 마지막 이벤트 time + 1을 커서로 이어받는다. 응답 정렬에 의존하지 않도록
+ * max(time)을 쓰고, 페이지 경계 중복은 (time,hash,coin)으로 제거한다.
+ */
+export async function getUserFundingAll(
+  user: string,
+  startTime: number,
+  dex?: string,
+  endTime?: number
+): Promise<FundingEvent[]> {
+  const seen = new Set<string>();
+  const out: FundingEvent[] = [];
+  let cursor = startTime;
+
+  for (let page = 0; page < FUNDING_MAX_PAGES; page++) {
+    const batch = await getUserFunding(user, cursor, dex, endTime);
+    if (batch.length === 0) break;
+    for (const e of batch) {
+      const k = `${e.time}|${e.hash}|${e.delta.coin}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(e);
+    }
+    if (batch.length < FUNDING_PAGE_LIMIT) break;
+    const maxTime = batch.reduce((m, e) => Math.max(m, e.time), 0);
+    if (maxTime + 1 <= cursor) break; // 방어: 커서가 전진하지 않으면 중단
+    cursor = maxTime + 1;
+  }
+  return out.sort((a, b) => a.time - b.time);
+}
+
 const FILLS_PAGE_LIMIT = 2000;
 
 /** Fetch fills with pagination. maxPages controls how deep to go. */
