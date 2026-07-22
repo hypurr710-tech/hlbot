@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import type { ArbPair } from "@/lib/arbStore";
 import {
   calcPremiumPct,
@@ -93,10 +94,14 @@ export default function LedgerCard({
     <div className="bg-hl-bg-secondary border border-hl-border rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 bg-hl-bg-tertiary border-b border-hl-border">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-hl-text-primary">{krName}</span>
-          <span className="text-xs text-hl-text-tertiary font-mono">
-            {pair.hlSymbol} / {pair.krLeg.krCode}
-          </span>
+          <Link href="/arb/history" className="group flex items-center gap-2" title="펀딩 수익 기록 보기">
+            <span className="font-semibold text-hl-text-primary group-hover:text-hl-accent transition-colors">
+              {krName}
+            </span>
+            <span className="text-xs text-hl-text-tertiary font-mono">
+              {pair.hlSymbol} / {pair.krLeg.krCode}
+            </span>
+          </Link>
           <span
             className={`px-2 py-0.5 rounded text-[10px] font-bold ${
               neutral

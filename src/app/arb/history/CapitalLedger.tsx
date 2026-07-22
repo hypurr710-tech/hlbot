@@ -26,33 +26,44 @@ interface AutoRow {
   id: string;
   ts: number;
   amountUsd: number;
-  kind: "deposit" | "withdraw";
+  memo: string;
 }
 
-/** 지갑들의 HL 입출금(디파짓/출금)만 추려 정규화. 이체류(transfer)는 제외. */
+/** 지갑들의 HL 자금 이동을 정규화. 외부 입출금(deposit/withdraw)에 더해
+ *  지갑 간 이체(internalTransfer 등 send/receive)도 포함 — perp↔spot 같은
+ *  같은 지갑 내부 이동(accountClassTransfer)만 제외한다. */
 async function fetchHlFlows(addresses: string[]): Promise<AutoRow[]> {
   const seen = new Set<string>();
   const out: AutoRow[] = [];
   const results = await Promise.all(
-    addresses.map((a) =>
-      getUserNonFundingLedgerUpdates(a, ONE_YEAR_AGO()).catch(() => [])
-    )
+    addresses.map(async (a) => [a, await getUserNonFundingLedgerUpdates(a, ONE_YEAR_AGO()).catch(() => [])] as const)
   );
-  for (const updates of results) {
+  for (const [addr, updates] of results) {
     for (const u of updates) {
       const t = u.delta.type;
-      if (t !== "deposit" && t !== "withdraw") continue;
-      const key = `${u.hash}|${u.time}|${t}`;
+      let signedAmt: number | null = null;
+      let memo = "";
+      const amt = Math.abs(parseFloat(String(u.delta.usdc ?? "0")));
+      if (!Number.isFinite(amt) || amt === 0) continue;
+      if (t === "deposit") {
+        signedAmt = amt;
+        memo = "입금 · 온체인 자동";
+      } else if (t === "withdraw") {
+        signedAmt = -amt;
+        memo = "출금 · 온체인 자동";
+      } else if (t === "internalTransfer" || t === "subAccountTransfer" || t === "spotTransfer") {
+        // 수신자면 +, 발신자면 − (destination이 조회 지갑인지로 판별)
+        const dest = String((u.delta as Record<string, unknown>).destination ?? "").toLowerCase();
+        const incoming = dest === addr.toLowerCase();
+        signedAmt = incoming ? amt : -amt;
+        memo = incoming ? "이체 수신 · 자동" : "이체 발신 · 자동";
+      } else {
+        continue; // accountClassTransfer(perp↔spot) 등 내부 이동은 제외
+      }
+      const key = `${addr}|${u.hash}|${u.time}|${t}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const amt = Math.abs(parseFloat(u.delta.usdc ?? "0"));
-      if (!Number.isFinite(amt) || amt === 0) continue;
-      out.push({
-        id: key,
-        ts: u.time,
-        amountUsd: t === "deposit" ? amt : -amt,
-        kind: t,
-      });
+      out.push({ id: key, ts: u.time, amountUsd: signedAmt, memo });
     }
   }
   return out;
@@ -120,7 +131,7 @@ export default function CapitalLedger({ addresses, onChange }: Props) {
       ts: r.ts,
       amountUsd: r.amountUsd,
       label: "HL",
-      memo: r.kind === "deposit" ? "입금 · 온체인 자동" : "출금 · 온체인 자동",
+      memo: r.memo,
     })),
     ...events.map((e) => ({
       auto: false as const,

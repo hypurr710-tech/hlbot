@@ -8,23 +8,12 @@ import { fetchFundingWithCache } from "./useFundingHistory";
 import type { FundingEvent } from "@/lib/hyperliquid";
 import LedgerPanel from "./LedgerPanel";
 import ScannerPanel from "./ScannerPanel";
-import SummaryStrip from "./SummaryStrip";
+import { calcKimchiPct } from "@/lib/arb";
 
 export default function ArbPage() {
   const { snapshot, error, lastUpdated, refreshing, refetch } = useLiveSnapshot();
   const shorts = useHlXyzShorts();
   const { pairs } = useArbPairs();
-
-  const shortsByKey = useMemo(() => {
-    const m: Record<string, { sizeAbs: number; cumFundingUsd: number }> = {};
-    for (const s of shorts) {
-      m[`${s.hlAddress.toLowerCase()}|${s.hlSymbol}`] = {
-        sizeAbs: s.sizeAbs,
-        cumFundingUsd: s.cumFundingUsd,
-      };
-    }
-    return m;
-  }, [shorts]);
 
   // Unique wallet addresses for pairs currently in play — fetch userFunding for each.
   const activePairs = useMemo(() => pairs.filter((p) => !p.closedAt), [pairs]);
@@ -64,23 +53,6 @@ export default function ArbPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uniqueAddressesKey]);
 
-  // Per-pair realized totals for SummaryStrip.
-  const pairRealizedFunding = useMemo(() => {
-    const now = Date.now();
-    const m: Record<string, { totalFundingUsd: number; elapsedHours: number }> = {};
-    for (const p of activePairs) {
-      const openedAt = pairOpenedAt(p);
-      const walletEvents = fundingByAddress[p.hlAddress.toLowerCase()] ?? [];
-      const symbolShort = p.hlSymbol.split(":").pop() ?? p.hlSymbol;
-      const total = walletEvents
-        .filter((e) => e.time >= openedAt && (e.delta.coin === p.hlSymbol || e.delta.coin === symbolShort))
-        .reduce((s, e) => s + parseFloat(e.delta.usdc), 0);
-      const elapsedHours = Math.max(0, now - openedAt) / 3600000;
-      m[p.id] = { totalFundingUsd: total, elapsedHours };
-    }
-    return m;
-  }, [activePairs, fundingByAddress]);
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -95,8 +67,14 @@ export default function ArbPage() {
         <div className="flex flex-col items-end gap-1.5">
           {snapshot && (
             <div className="text-xs text-hl-text-tertiary font-mono">
-              USDT/KRW {snapshot.fx.usdtKrwUpbit?.toFixed(2) ?? "—"} · USD/KRW{" "}
-              {snapshot.fx.usdKrwHana?.toFixed(2) ?? "—"}
+              USDT/KRW {snapshot.fx.usdtKrwUpbit?.toFixed(2) ?? "—"}
+              {snapshot.fx.usdtKrwUpbit != null && snapshot.fx.usdKrwHana != null && (
+                <span className={calcKimchiPct(snapshot.fx.usdtKrwUpbit, snapshot.fx.usdKrwHana) >= 0 ? "text-hl-green" : "text-hl-red"}>
+                  {" "}(김프 {calcKimchiPct(snapshot.fx.usdtKrwUpbit, snapshot.fx.usdKrwHana) >= 0 ? "+" : ""}
+                  {calcKimchiPct(snapshot.fx.usdtKrwUpbit, snapshot.fx.usdKrwHana).toFixed(2)}%)
+                </span>
+              )}
+              {" "}· USD/KRW {snapshot.fx.usdKrwHana?.toFixed(2) ?? "—"}
             </div>
           )}
           <FreshnessIndicator
@@ -118,12 +96,6 @@ export default function ArbPage() {
           Warnings: {snapshot.warnings.join(", ")}
         </div>
       )}
-
-      <SummaryStrip
-        snapshot={snapshot}
-        hlPositionsBySymbol={shortsByKey}
-        pairRealizedFunding={pairRealizedFunding}
-      />
 
       <section>
         <div className="flex items-baseline justify-between mb-4">
