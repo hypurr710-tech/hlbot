@@ -41,9 +41,9 @@ export default function PeriodTable({ title, rows, period, defaultVisible, aprRe
           정산 기록 없음
         </div>
       ) : (
-        <table className="w-full text-xs font-mono">
+        <table className="w-full text-[13px] font-mono">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-hl-text-tertiary">
+            <tr className="text-[11px] uppercase tracking-wider text-hl-text-tertiary">
               <th className="text-left px-4 py-2 font-medium">{period === "month" ? "월" : "날짜"}</th>
               <th className="text-right px-4 py-2 font-medium">펀딩피</th>
               <th className="text-right px-4 py-2 font-medium">수익률</th>

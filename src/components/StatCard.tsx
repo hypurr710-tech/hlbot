@@ -7,6 +7,8 @@ interface StatCardProps {
   change?: number;
   icon?: React.ReactNode;
   loading?: boolean;
+  /** value 숫자에 얹을 색상 클래스 (예: 손익 초록/빨강) */
+  valueClass?: string;
 }
 
 export default function StatCard({
@@ -16,6 +18,7 @@ export default function StatCard({
   change,
   icon,
   loading,
+  valueClass,
 }: StatCardProps) {
   return (
     <div className="bg-hl-bg-secondary border border-hl-border rounded-xl p-3 md:p-5 glow-hover">
@@ -32,7 +35,7 @@ export default function StatCard({
         </div>
       ) : (
         <>
-          <div className="text-lg md:text-2xl font-semibold text-hl-text-primary font-mono tracking-tight">
+          <div className={`text-lg md:text-2xl font-semibold font-mono tracking-tight ${valueClass ?? "text-hl-text-primary"}`}>
             {value}
           </div>
           <div className="flex items-center gap-2 mt-1">

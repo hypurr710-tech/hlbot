@@ -4,7 +4,7 @@ import StatCard from "@/components/StatCard";
 import type { LedgerStats } from "@/lib/fundingLedger";
 import { calcRealizedAprPct, calcTotalReturnPct, isAprReliable } from "@/lib/arb";
 import { useAprBasis, APR_BASIS_LABEL } from "@/lib/aprBasis";
-import { formatUsd, formatKrwCompact } from "@/lib/format";
+import { formatUsd, formatKrwCompact, pnlColor } from "@/lib/format";
 
 interface Props {
   stats: LedgerStats;
@@ -15,6 +15,8 @@ interface Props {
   otherAdjustUsd: number;     // capitalAdjustmentUsd
   capitalEventCount: number;
   usdKrwHana: number | null;
+  /** USDT/KRW (업비트) — 예치금·투입자본의 원화 환산 표기용 */
+  usdtKrw: number | null;
   loading: boolean;
 }
 
@@ -32,6 +34,7 @@ export default function StatGrid({
   otherAdjustUsd,
   capitalEventCount,
   usdKrwHana,
+  usdtKrw,
   loading,
 }: Props) {
   const { basis, setBasis } = useAprBasis();
@@ -85,6 +88,7 @@ export default function StatGrid({
         <StatCard
           title="누적 펀딩 수익"
           value={formatUsd(stats.totalUsdc)}
+          valueClass={pnlColor(stats.totalUsdc)}
           subtitle={`${fmtStartDate(stats.firstOpenedAt)} · ${Math.floor(stats.elapsedDays) + 1}일째 · 정산 ${stats.settlementCount.toLocaleString("en-US")}회`}
           loading={loading}
         />
@@ -103,6 +107,7 @@ export default function StatGrid({
         <StatCard
           title="직전 펀비"
           value={stats.lastHourUsdc != null ? formatUsd(stats.lastHourUsdc) : "—"}
+          valueClass={stats.lastHourUsdc != null ? pnlColor(stats.lastHourUsdc) : undefined}
           subtitle={
             stats.lastHourTime != null
               ? new Date(stats.lastHourTime).toLocaleString("ko-KR", {
@@ -115,13 +120,18 @@ export default function StatGrid({
         <StatCard
           title="다음 펀비 예상"
           value={nextFundingUsd != null ? formatUsd(nextFundingUsd) : "—"}
+          valueClass={nextFundingUsd != null ? pnlColor(nextFundingUsd) : undefined}
           subtitle={`정산까지 ${mm}:${String(ss).padStart(2, "0")}`}
           loading={loading}
         />
         <StatCard
           title="현재 투입 자본"
           value={fullCapital != null ? formatUsd(fullCapital) : "—"}
-          subtitle={`입출금 ${capitalEventCount}건 기록${otherAdjustUsd !== 0 ? ` · 기타 ${formatUsd(otherAdjustUsd)}` : ""}`}
+          subtitle={
+            fullCapital != null && usdtKrw != null
+              ? `≈ ${formatKrwCompact(fullCapital * usdtKrw)} · 입출금 ${capitalEventCount}건`
+              : `입출금 ${capitalEventCount}건 기록`
+          }
           loading={loading}
         />
         <StatCard
@@ -133,7 +143,11 @@ export default function StatGrid({
         <StatCard
           title="HL 예치금"
           value={hlEquityUsd != null ? formatUsd(hlEquityUsd) : "—"}
-          subtitle="일반 + xyz dex 합산 · 실시간"
+          subtitle={
+            hlEquityUsd != null && usdtKrw != null
+              ? `≈ ${formatKrwCompact(hlEquityUsd * usdtKrw)} (USDT ₩${usdtKrw.toLocaleString("ko-KR")})`
+              : "실시간 조회 중"
+          }
           loading={loading}
         />
         <StatCard

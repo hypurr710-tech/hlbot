@@ -11,11 +11,13 @@ import type { FundingEvent } from "@/lib/hyperliquid";
 import { collectWalletEvents, calcLedgerStats } from "@/lib/fundingLedger";
 import { aggregateFundingByPeriod, buildPeriodRows, isAprReliable } from "@/lib/arb";
 import { loadCapitalEvents, capitalAdjustmentUsd } from "@/lib/capitalStore";
+import { loadSpotTrades, computeSpotPositions } from "@/lib/spotLedger";
 import { useAprBasis } from "@/lib/aprBasis";
 import StatGrid from "./StatGrid";
 import PeriodTable from "./PeriodTable";
 import HourlyTable from "./HourlyTable";
 import CapitalLedger from "./CapitalLedger";
+import SpotTradeLedger from "./SpotTradeLedger";
 
 export default function ArbHistoryPage() {
   const { snapshot } = useLiveSnapshot();
@@ -100,10 +102,20 @@ export default function ArbHistoryPage() {
   const [capitalVersion, setCapitalVersion] = useState(0);
   const capitalEvents = useMemo(() => loadCapitalEvents(), [capitalVersion]);
   const otherAdjustUsd = capitalAdjustmentUsd(capitalEvents);
-  const spotPrincipalKrw = activePairs.reduce(
-    (s, p) => s + p.krLeg.quantity * p.krLeg.avgPriceKrw,
-    0
-  );
+
+  // 현물 원금: 매매장부에 기록이 있는 종목은 장부가 정답(보유수량×이동평균 평단),
+  // 기록이 없는 종목만 페어에 수동 입력한 수량×평단으로 보충.
+  const [spotVersion, setSpotVersion] = useState(0);
+  const spotTrades = useMemo(() => loadSpotTrades(), [spotVersion]);
+  const spotPositions = useMemo(() => computeSpotPositions(spotTrades), [spotTrades]);
+  const spotPrincipalKrw = useMemo(() => {
+    const recordedCodes = new Set(spotPositions.map((p) => p.krCode));
+    const fromLedger = spotPositions.reduce((s, p) => s + p.investedKrw, 0);
+    const fromPairs = activePairs
+      .filter((p) => !recordedCodes.has(p.krLeg.krCode))
+      .reduce((s, p) => s + p.krLeg.quantity * p.krLeg.avgPriceKrw, 0);
+    return fromLedger + fromPairs;
+  }, [spotPositions, activePairs]);
   const usdKrwHana = snapshot?.fx.usdKrwHana ?? null;
   const spotPrincipalUsd = usdKrwHana != null && usdKrwHana > 0 ? spotPrincipalKrw / usdKrwHana : null;
   const fullCapital =
@@ -159,6 +171,7 @@ export default function ArbHistoryPage() {
         otherAdjustUsd={otherAdjustUsd}
         capitalEventCount={capitalEvents.length}
         usdKrwHana={usdKrwHana}
+        usdtKrw={snapshot?.fx.usdtKrwUpbit ?? null}
         loading={loading && equityLoading}
       />
 
@@ -167,9 +180,11 @@ export default function ArbHistoryPage() {
         <PeriodTable title="일별 기록" rows={dailyRows} period="day" defaultVisible={14} aprReliable={reliable} />
       </div>
 
-      <HourlyTable events={events} defaultVisible={48} />
+      <HourlyTable events={events} />
 
       <CapitalLedger onChange={onCapitalChange} />
+
+      <SpotTradeLedger snapshot={snapshot} onChange={() => setSpotVersion((v) => v + 1)} />
 
       <footer className="pt-8 mt-8 border-t border-hl-border text-[11px] text-hl-text-tertiary font-mono leading-relaxed">
         <ul className="space-y-0.5">
